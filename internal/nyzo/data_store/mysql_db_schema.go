@@ -19,6 +19,7 @@ const (
         INDEX(sender(4)),
         INDEX(recipient(4)),
 	    INDEX(timestamp),
+		INDEX(signature(4)),
 		INDEX(original_signature(4)),
 		INDEX(type),
   	    PRIMARY KEY (height, canonical))`
@@ -35,6 +36,8 @@ const (
 		balance_list_hash BINARY(32) NOT NULL,
 		verifier BINARY(32) NOT NULL,
 		signature BINARY(64) NOT NULL,
+		INDEX(hash(4)),
+		INDEX(signature(4)),
   	    PRIMARY KEY (height))`
 	addBlockStatement               = `REPLACE INTO blocks(chain_version, height, hash, previous_hash, cycle_length, start, verification, transaction_count, balance_list_hash, verifier, signature) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	createCycleEventsTableStatement = `CREATE TABLE IF NOT EXISTS cycle_events (
