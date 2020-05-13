@@ -1,0 +1,20 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+.DS_Store
+/.idea
+/test/test_data_directory
+/test/test_data/new_private_seed
+/test/test_data/nodes_persisted
+/test/test_data/untested_verifier_info
+/test/test_data/blocks/000/000011.nyzoblock
+/test/test_data/blocks/000/000012.nyzoblock

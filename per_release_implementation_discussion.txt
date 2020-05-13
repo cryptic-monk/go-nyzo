@@ -1,0 +1,39 @@
+**Work in Progress**
+
+# Nyzo 580: fee correction
+
+Fully implemented.
+
+# Nyzo 579: automatic whitelisting
+
+Sentinel side implemented.
+TODO: implement verifier side.
+
+# Nyzo 578: error responses
+
+Not important for consensus.
+TODO: implement.
+
+# Nyzo 577: block delay for testing
+
+Not important for consensus.
+TODO: implement.
+
+# Nyzo 576: v2 cycle transaction script
+
+Not yet needed.
+TODO: implement.
+
+# Nyzo 575: v2 cycle tx commands
+
+Not yet needed.
+TODO: implement.
+
+# Nyzo 574: trusted-message verification
+
+Not yet needed.
+TODO: implement.
+
+# Nyzo 573: blockchain v2
+
+TODO: approvedTransactionsForBlock, enforceCycleTransactionRules, BlockchainVersionManager, TransactionResponse touched here don't exist yet, will be implemented later.

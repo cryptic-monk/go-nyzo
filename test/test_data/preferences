@@ -1,0 +1,7 @@
+sql_protocol=tcp
+sql_host=127.0.0.1
+sql_port=3306
+sql_db_name=nyzo
+sql_user=gonyzo
+sql_password=somepassword
+fast_chain_initialization=0

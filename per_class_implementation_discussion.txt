@@ -1,0 +1,58 @@
+**Work in Progress**
+
+✓ = verified to be completely implemented up to v580
+
+# General ToDos
+TODO: testnet mode (e.g. different Genesis block) not implemented yet.
+TODO: Java Maps offer natural deduping of keys, we might have missed one or the other deduping, should be checked.
+TODO: actually distribute the genesis block with the binary.
+
+# ApprovedCycleTransaction.java ✓
+
+Simple data type.
+
+# BlockFileConsolidator.java ✓
+
+This is part of the block file handler in Go, works pretty similarly otherwise.
+
+# RunMode.java ✓
+
+Small utility class in Java to keep track of the run mode aka. node type. In go, we added this to interfaces/context
+for convenience. Implementation is quite different, but should lead to similar results.
+
+# SeedTransactionManager.java ✓
+
+This is part of the transaction manager in Go, implementation is pretty similar apart from that. In Go, as in Java,
+the seed transaction manager is pretty fragile (depending on a centralized online repo). Astonishing that no bigger
+issues came up for it in the past.
+
+# Verifier.java
+
+In Java, the Verifier class loads and freezes the genesis block. This moved to the block authority in Go, which appears
+more natural. Also, Java tries to load the genesis block from a trusted source, which appears fragile. In Go, we
+distribute the genesis block with the node package and move it in place during configuration.EnsureSetup.
+
+# sentinel/Sentinel.java
+
+Like all other node types, the sentinel is tied into the general node framework.
+
+- managed verifiers are loaded in node manager
+- the cycle is bootstrapped in cycle authority
+- the bootstrap block is fetched by the block authority (if needed)
+
+Overall, this leads to a pretty different bootstrap process compared to Java, but given intense testing, the end
+result should be the same, and the changes should not be consensus relevant. The more event driven architecture
+of the Go implementation requires different approaches in these areas, trying to replicate Java 1:1 would lead
+to a very atypical use of Go. 
+
+TODO: automatic sentinel whitelisting (v579)
+
+# sentinel/SentinelUtil.java ✓
+
+See sentinel/Sentinel.java
+
+# web/*
+
+Not implemented yet, not consensus relevant. Go could take a different approach here, offering complementary services
+to the Java node, like the Archive node, or a JSON based interface.
+
