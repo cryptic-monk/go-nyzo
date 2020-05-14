@@ -158,6 +158,35 @@ func TestSchrodingersCat(t *testing.T) {
 	}
 }
 
+// Test transition from V0 to V1 blockchain.
+func TestV0V1Transition(t *testing.T) {
+	var previousBlock *blockchain_data.Block
+	var balanceList *blockchain_data.BalanceList
+	blocks, _ := ctxt.BlockFileHandler.GetBlocks(4499990, 4500300)
+	balanceList = ctxt.BlockFileHandler.GetBalanceList(4499989)
+	previousBlock = ctxt.BlockFileHandler.GetBlock(4499989)
+	for _, block := range blocks {
+		// verification of the block and any transactions it contains
+		if !ctxt.BlockAuthority.BlockIsValid(block) {
+			t.Errorf("Block %d could not be verified.", block.Height)
+		}
+		// has cycle information been calculated correctly?
+		if block.CycleInformation == nil {
+			t.Errorf("Could not calculate cycle information for block %d.", block.Height)
+		} else {
+			if block.CycleInformation.NewVerifier {
+				fmt.Printf("New verifier at height %d: %s, maximum cycle length %d, cycle length: %d\n", block.Height, identity.BytesToNyzoHex(block.VerifierIdentifier), block.CycleInformation.MaximumCycleLength, block.CycleInformation.CycleLengths[0])
+			}
+		}
+		// balance lists are not technically part of a block
+		balanceList = balance_authority.UpdateBalanceListForNextBlock(ctxt, previousBlock.VerifierIdentifier, balanceList, block, false)
+		if !bytes.Equal(balanceList.GetHash(), block.BalanceListHash) {
+			t.Errorf("Derived balance list hash does not match. Want: %s, got: %s", identity.BytesToNyzoHex(block.BalanceListHash), identity.BytesToNyzoHex(balanceList.GetHash()))
+		}
+		previousBlock = block
+	}
+}
+
 // Test handling of V2 balance list with signatures. Part 1: 1st signature ever.
 func TestV2BalanceList1(t *testing.T) {
 	// keep a copy of the real cycle authority in case some tests need it
