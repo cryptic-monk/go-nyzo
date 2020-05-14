@@ -12,7 +12,7 @@ and node status information in a database.
 
 ### Installation
 IMPORTANT: this experimental node accesses the same resources that the Java node would, so do not run it on a system 
-with an existing Java node.
+with an existing Java node. See below for an installation example on Ubuntu 18.04 LTS.
 
 1. Download and install the latest version of Go
 2. Install the project's sole dependency: `go get -u github.com/go-sql-driver/mysql`
@@ -65,6 +65,50 @@ The archive node can be reset by deleting all database entries in the database d
 that need to be touched. The cycle events should be deleted down to the same height that the blocks were deleted down to. 
 
 The node's database follows the Nyzo Open DB structure, see here: https://github.com/Open-Nyzo/Open-Nyzo-Projects/tree/master/Open-DB.
+
+#### Installation Example: Ubuntu 18.04 LTS
+
+Install Go:
+
+    cd
+    wget https://dl.google.com/go/go1.14.2.linux-amd64.tar.gz
+    sudo tar -C /usr/local -xzf go1.14.2.linux-amd64.tar.gz
+
+Set path:
+
+- open ~/.profile in an editor, e.g. `nano ~/.profile`
+- add the following to the end of the file: `export PATH=$PATH:/usr/local/go/bin`
+- exit the editor
+- `source ~/.profile`
+
+Check:
+
+    go version
+
+=> This should spit out 1.14.2, the version you installed above. If not, debug your Go setup.
+    
+Install dependency:
+
+    go get -u github.com/go-sql-driver/mysql
+    
+Get go-nyzo repo:
+
+    cd ~/go/src/github.com
+    mkdir cryptic-monk
+    cd cryptic-monk
+    git clone https://github.com/cryptic-monk/go-nyzo.git
+    
+Run:
+
+    go build github.com/cryptic-monk/go-nyzo/cmd/archive_node &&  go run github.com/cryptic-monk/go-nyzo/cmd/archive_node
+    
+Run the node in tmux or similar so that you can later log out of your session. Stop the node with Ctrl+C.
+
+Update:
+
+    cd ~/go/src/github.com/cryptic-monk/go-nyzo
+    git pull
+    go build github.com/cryptic-monk/go-nyzo/cmd/archive_node &&  go run github.com/cryptic-monk/go-nyzo/cmd/archive_node
 
 ### Project Structure
 
