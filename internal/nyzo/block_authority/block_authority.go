@@ -139,7 +139,7 @@ func (s *state) addPreviousBlockHashesToTransactions(block *blockchain_data.Bloc
 // all the way up to the block manager. We do it here in the block manager.
 func (s *state) previousBlockHashForTransaction(hashHeight, transactionHeight int64, previousHashInChain []byte) []byte {
 	// TODO: handle unfrozen state
-	if hashHeight <= s.frozenEdgeHeight {
+	if hashHeight <= s.frozenEdgeHeight || !s.chainInitialized {
 		block := s.ctxt.BlockFileHandler.GetBlock(hashHeight)
 		if block != nil {
 			return block.Hash
