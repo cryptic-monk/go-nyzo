@@ -69,6 +69,7 @@ func (s *state) Start() {
 				block := m.Payload[0].(*blockchain_data.Block)
 				s.frozenEdgeHeight = block.Height
 				// check to see if we need to load new seed transactions when we freeze the genesis block, then again every 5 blocks (35 seconds)
+				// TODO: this can be lengthy, once the transaction manager handles more than just seed transactions, this should run in a goroutine
 				if (block.Height == 0 || block.Height-lastSeedTransactionCacheHeight > 4) && block.Height <= highestSeedTransactionHeight && s.chainInitialized {
 					lastSeedTransactionCacheHeight = block.Height
 					s.cacheSeedTransactions()
