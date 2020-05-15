@@ -37,6 +37,7 @@ const (
 	watchOnlyMeshRequestInterval     = 50 // ca. every 5 minutes
 	nodesFilePermissions             = 0644
 	consecutiveFailuresBeforeRemoval = 6 // mark a node as inactive after ... consecutive failed connection attempts
+	whitelistUpdateInterval          = configuration.DynamicWhitelistInterval / 2
 )
 
 type state struct {
@@ -58,6 +59,7 @@ type state struct {
 	missingIncycleNodesMessage string              // a string message with a list of missing in cycle nodes
 	randomNodePosition         int                 // instead of finding "random" nodes, we just loop through our node list, I think this should work equally well
 	frozenEdgeHeight           int64
+	lastWhitelistUpdate        int64
 }
 
 // Are we at all accepting messages from the given peer? Used to quickly terminate unwanted connections.
@@ -596,6 +598,10 @@ func (s *state) Start() {
 		s.bootstrapPhase = true
 		blockDurationTicker = time.NewTicker(configuration.BlockDuration * time.Millisecond)
 	}
+	// Try to get whitelisted by managed verifiers. 1st step: send an ip request.
+	if s.ctxt.RunMode() == interfaces.RunModeSentinel || s.ctxt.RunMode() == interfaces.RunModeArchive {
+		s.startWhitelistUpdate()
+	}
 	done := false
 	for !done {
 		select {
@@ -620,6 +626,7 @@ func (s *state) Start() {
 					s.meshRequestSuccessCount = 0
 					s.bootstrapMesh()
 					s.bootstrapPhase = true
+					s.startWhitelistUpdate()
 					blockDurationTicker = time.NewTicker(configuration.BlockDuration * time.Millisecond)
 				}
 			case messages.TypeInternalExiting:
@@ -661,6 +668,10 @@ func (s *state) Start() {
 					content := message_content.NewMeshResponse(s.getFullMesh())
 					m.ReplyChannel <- messages.NewLocal(messages.TypeFullMeshResponse, content, s.ctxt.Identity)
 				}
+			case messages.TypeIpAddressResponse:
+				s.processIpAddressResponse(m)
+			case messages.TypeWhitelistResponse:
+				s.processWhitelistResponse(m)
 			}
 		case <-blockDurationTicker.C:
 			// update mesh data, Java does this more often, but I'd say it's pretty expensive and 7s should still be OK given what it's used for
@@ -709,6 +720,12 @@ func (s *state) Start() {
 				s.haveNodeHistory = true
 				s.ctxt.PersistentData.Store(configuration.HaveNodeHistoryKey, "1")
 			}
+			// periodically refresh whitelisting
+			if s.ctxt.RunMode() == interfaces.RunModeSentinel || s.ctxt.RunMode() == interfaces.RunModeArchive {
+				if (time.Now().UnixNano()/1000000)-s.lastWhitelistUpdate > whitelistUpdateInterval {
+					s.startWhitelistUpdate()
+				}
+			}
 		}
 	}
 }
@@ -728,6 +745,8 @@ func (s *state) Initialize() error {
 	router.Router.AddRoute(messages.TypeMissingBlockRequest, s.messageChannel)
 	router.Router.AddRoute(messages.TypeMeshRequest, s.messageChannel)
 	router.Router.AddRoute(messages.TypeFullMeshRequest, s.messageChannel)
+	router.Router.AddRoute(messages.TypeIpAddressResponse, s.messageChannel)
+	router.Router.AddRoute(messages.TypeWhitelistResponse, s.messageChannel)
 	s.internalMessageChannel = make(chan *messages.InternalMessage, 1500)
 	router.Router.AddInternalRoute(messages.TypeInternalExiting, s.internalMessageChannel)
 	router.Router.AddInternalRoute(messages.TypeInternalNewFrozenEdgeBlock, s.internalMessageChannel)

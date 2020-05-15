@@ -28,7 +28,6 @@ const (
 	blockUpdateIntervalFast     = 1000
 	blockUpdateIntervalStandard = 2000
 	queryHistoryLength          = 10
-	whitelistUpdateInterval     = configuration.DynamicWhitelistInterval / 2
 )
 
 type state struct {
@@ -44,8 +43,7 @@ type state struct {
 	chainInitialized          bool                                // true once the chain is ready for operation (ready to be added to)
 	managedVerifiers          []*networking.ManagedVerifier       // handled by node manager, copied here for mere convenience
 	managedVerifierStatus     []*networking.ManagedVerifierStatus // status tracked by block fetching process
-	lastWhitelistUpdate       int64
-	blockSpeedTracker         int64 // tracks block speed (important e.g. during historical loading/catchup)
+	blockSpeedTracker         int64                               // tracks block speed (important e.g. during historical loading/catchup)
 	lastSpeedTrackingBlock    int64
 	fastChainInitialization   bool // read from preferences file, set to true to speedup chain initialization (especially historical loading in archive mode), at the cost of some (pretty theoretical) security
 }
@@ -180,39 +178,6 @@ func (s *state) sendBootstrapBlockRequest() {
 		entryPoints := s.ctxt.NodeManager.GetTrustedEntryPoints()
 		for _, verifier := range entryPoints {
 			go networking.FetchTcpNamed(messageBlockRequest, verifier.Host, verifier.Port)
-		}
-	}
-}
-
-// Send ip requests to all managed verifiers. 1st step to get whitelisted.
-func (s *state) startWhitelistUpdate() {
-	logging.InfoLog.Print("Starting whitelisting process for all managed verifiers.")
-	s.lastWhitelistUpdate = time.Now().UnixNano() / 1000000
-	for _, verifier := range s.managedVerifiers {
-		messageIpRequest := messages.NewLocal(messages.TypeIpAddressRequest, nil, verifier.Identity)
-		go networking.FetchTcpNamed(messageIpRequest, verifier.Host, verifier.Port)
-	}
-}
-
-// Process an IP address response. 2nd whitelisting step.
-func (s *state) processIpAddressResponse(message *messages.Message) {
-	ipResponseContent := *message.Content.(*message_content.IpAddress)
-	for _, verifier := range s.managedVerifiers {
-		// we only accept responses from known verifiers
-		if bytes.Equal(message.SourceId, verifier.Identity.PublicKey) {
-			messageWhitelistRequest := messages.NewLocal(messages.TypeWhitelistRequest, &ipResponseContent, verifier.Identity)
-			go networking.FetchTcpNamed(messageWhitelistRequest, verifier.Host, verifier.Port)
-		}
-	}
-}
-
-// Process a whitelisting response. 3rd whitelisting step.
-func (s *state) processWhitelistResponse(message *messages.Message) {
-	whitelistResponseContent := *message.Content.(*message_content.BooleanResponse)
-	for _, verifier := range s.managedVerifiers {
-		// we only accept responses from known verifiers
-		if bytes.Equal(message.SourceId, verifier.Identity.PublicKey) {
-			logging.TraceLog.Printf("Whitelist response from %s is %t, message: %s.", verifier.Identity.ShortId, whitelistResponseContent.Success, whitelistResponseContent.Message)
 		}
 	}
 }
@@ -459,10 +424,6 @@ func (s *state) Start() {
 		s.managedVerifierStatus[i] = new(networking.ManagedVerifierStatus)
 		s.managedVerifierStatus[i].QueryHistory = make([]int, queryHistoryLength)
 	}
-	// Try to get whitelisted by managed verifiers. 1st step: send an ip request.
-	if s.ctxt.RunMode() == interfaces.RunModeSentinel || s.ctxt.RunMode() == interfaces.RunModeArchive {
-		s.startWhitelistUpdate()
-	}
 	// Load highest previous height from disk.
 	if s.ctxt.RunMode() != interfaces.RunModeArchive {
 		go s.loadChainFromDisk()
@@ -494,10 +455,6 @@ func (s *state) Start() {
 				s.processBlockResponse(m)
 			case messages.TypeBlockWithVotesResponse:
 				s.processBlockWithVotesResponse(m)
-			case messages.TypeIpAddressResponse:
-				s.processIpAddressResponse(m)
-			case messages.TypeWhitelistResponse:
-				s.processWhitelistResponse(m)
 			}
 		case <-chainWatcherTicker.C:
 			if s.ctxt.RunMode() == interfaces.RunModeSentinel && !s.chainInitialized && s.chainLoaded && s.bootstrapFrozenEdgeHeight > 0 {
@@ -516,10 +473,6 @@ func (s *state) Start() {
 				if s.ctxt.RunMode() == interfaces.RunModeArchive || s.ctxt.RunMode() == interfaces.RunModeSentinel {
 					// These run modes just watch the chain on a timer.
 					s.watchChain()
-					// periodically refresh whitelisting
-					if (time.Now().UnixNano()/1000000)-s.lastWhitelistUpdate > whitelistUpdateInterval {
-						s.startWhitelistUpdate()
-					}
 				} else {
 					// Initialization done for other run modes, we'll track the consensus.
 					chainWatcherTicker.Stop()
@@ -535,8 +488,6 @@ func (s *state) Initialize() error {
 	s.messageChannel = make(chan *messages.Message, 20)
 	router.Router.AddRoute(messages.TypeBlockResponse, s.messageChannel)
 	router.Router.AddRoute(messages.TypeBlockWithVotesResponse, s.messageChannel)
-	router.Router.AddRoute(messages.TypeIpAddressResponse, s.messageChannel)
-	router.Router.AddRoute(messages.TypeWhitelistResponse, s.messageChannel)
 	s.internalMessageChannel = make(chan *messages.InternalMessage, 150)
 	router.Router.AddInternalRoute(messages.TypeInternalDataStoreHeight, s.internalMessageChannel)
 	router.Router.AddInternalRoute(messages.TypeInternalBootstrapBlock, s.internalMessageChannel)
