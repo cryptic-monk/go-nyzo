@@ -60,6 +60,7 @@ type state struct {
 	randomNodePosition         int                 // instead of finding "random" nodes, we just loop through our node list, I think this should work equally well
 	frozenEdgeHeight           int64
 	lastWhitelistUpdate        int64
+	chainInitialized           bool
 }
 
 // Are we at all accepting messages from the given peer? Used to quickly terminate unwanted connections.
@@ -590,13 +591,12 @@ func (s *state) Start() {
 	defer logging.InfoLog.Print("Main loop of node manager exited gracefully.")
 	defer s.ctxt.WaitGroup.Done()
 	logging.InfoLog.Print("Starting main loop of node manager.")
-	blockDurationTicker := &time.Ticker{}
+	blockDurationTicker := time.NewTicker(configuration.BlockDuration * time.Millisecond)
 	if s.ctxt.RunMode() != interfaces.RunModeArchive {
 		// archive mode will only start contacting the mesh once we loaded the blocks in the online repo
 		s.meshRequestSuccessCount = 0
 		s.bootstrapMesh()
 		s.bootstrapPhase = true
-		blockDurationTicker = time.NewTicker(configuration.BlockDuration * time.Millisecond)
 	}
 	// Try to get whitelisted by managed verifiers. 1st step: send an ip request.
 	if s.ctxt.RunMode() == interfaces.RunModeSentinel || s.ctxt.RunMode() == interfaces.RunModeArchive {
@@ -624,11 +624,10 @@ func (s *state) Start() {
 			case messages.TypeInternalChainInitialized:
 				if s.ctxt.RunMode() == interfaces.RunModeArchive {
 					s.meshRequestSuccessCount = 0
-					s.bootstrapMesh()
 					s.bootstrapPhase = true
 					s.startWhitelistUpdate()
-					blockDurationTicker = time.NewTicker(configuration.BlockDuration * time.Millisecond)
 				}
+				s.chainInitialized = true
 			case messages.TypeInternalExiting:
 				done = true
 			}
@@ -674,6 +673,10 @@ func (s *state) Start() {
 				s.processWhitelistResponse(m)
 			}
 		case <-blockDurationTicker.C:
+			// In archive mode, only maintain mesh relationship after chain initialization.
+			if s.ctxt.RunMode() == interfaces.RunModeArchive && !s.chainInitialized {
+				continue
+			}
 			// update mesh data, Java does this more often, but I'd say it's pretty expensive and 7s should still be OK given what it's used for
 			s.maintainMeshData()
 			if s.bootstrapPhase {

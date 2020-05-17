@@ -36,6 +36,7 @@ type CycleAuthorityInterface interface {
 	VerifierInCurrentCycle(id []byte) bool                                                      // returns true if the verifier with this id is currently in the cycle
 	GetCycleInformationForBlock(block *blockchain_data.Block) *blockchain_data.CycleInformation // get cycle information for this block
 	DetermineContinuityForBlock(block *blockchain_data.Block) int                               // determine this block's continuity (diversity) state
+	HasCycleAt(block *blockchain_data.Block) bool                                               // returns "true" if we know the cycle at the given block
 }
 
 type BlockAuthorityInterface interface {

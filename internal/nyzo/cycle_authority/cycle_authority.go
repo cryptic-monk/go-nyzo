@@ -26,6 +26,7 @@ import (
 const (
 	localMessageGetCurrentCycleLength  = -1
 	localMessageVerifierInCurrentCycle = -2
+	localMessageHasCycleAt             = -3
 )
 
 type state struct {
@@ -201,6 +202,12 @@ func (s *state) DetermineContinuityForBlock(block *blockchain_data.Block) int {
 	return block.ContinuityState
 }
 
+// Returns true if we know a cycle at the given block.
+func (s *state) HasCycleAt(block *blockchain_data.Block) bool {
+	reply := router.GetInternalReply(localMessageHasCycleAt, block)
+	return reply.Payload[0].(bool)
+}
+
 // Utility to prepend y to x in the most memory efficient way possible.
 func prependBytes(x [][]byte, y []byte) [][]byte {
 	x = append(x, []byte{})
@@ -227,14 +234,18 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 	if startBlock.Height < s.bufferTailHeight || startBlock.Height > s.bufferHeadHeight+100 {
 		// abandon a buffer that is probably not useful, should be rare
 		s.cycleBuffer = make([][]byte, 0, 0)
-		s.bufferTailHeight = -1
 		s.bufferHeadHeight = -1
 	}
 
 	if s.bufferHeadHeight >= 0 {
 		// if we have a valid buffer, fill it up to the current head
 		for i := s.bufferHeadHeight + 1; i <= startBlock.Height; i++ {
-			fillupBlock := s.ctxt.BlockFileHandler.GetBlock(i)
+			var fillupBlock *blockchain_data.Block
+			if i == startBlock.Height {
+				fillupBlock = startBlock
+			} else {
+				fillupBlock = s.ctxt.BlockFileHandler.GetBlock(i)
+			}
 			if fillupBlock == nil {
 				// gap in the chain, can't possible find a cycle
 				return false, false, false, nil, 0
@@ -245,6 +256,7 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 	}
 
 	if s.bufferHeadHeight == -1 {
+		// if we don't have a valid buffer, start one
 		s.cycleBuffer = append(s.cycleBuffer, startBlock.VerifierIdentifier)
 		s.bufferHeadHeight = startBlock.Height
 		s.bufferTailHeight = startBlock.Height
@@ -300,30 +312,13 @@ func (s *state) updateVerifiersInCurrentCycle(currentBlock *blockchain_data.Bloc
 	var oldCycleLength int
 	if s.currentCycle != nil {
 		oldCycleLength = len(s.currentCycle)
-	} else {
-		oldCycleLength = 0
 	}
 
 	if foundCycle {
 		// we found a regular cycle
 		s.currentCycle = cycle
 		s.cycleComplete = true
-	} else {
-		if currentBlock.Height == s.currentCycleEndHeight+1 && s.cycleComplete {
-			// fallback: we extend an existing cycle
-			for position, id := range s.currentCycle {
-				if bytes.Equal(id, currentBlock.VerifierIdentifier) {
-					if len(s.currentCycle) > position {
-						s.currentCycle = s.currentCycle[position+1:]
-					}
-					break
-				}
-			}
-			s.currentCycle = append(s.currentCycle, currentBlock.VerifierIdentifier)
-		}
-	}
 
-	if s.cycleComplete {
 		// If this is a new verifier and the height is greater than the previous value of lastVerifierJoinHeight,
 		// store the height. This is used to cheaply determine whether new verifiers are eligible to join. The
 		// greater-than condition is used to avoid issues that may arise during initialization.
@@ -351,8 +346,15 @@ func (s *state) updateVerifiersInCurrentCycle(currentBlock *blockchain_data.Bloc
 }
 
 /// Set cycle info directly: info obtained from a bootstrap response.
-func (s *state) setBootstrapCycle(cycle [][]byte) {
-	// fallback two: we have bootstrap info
+func (s *state) setBootstrapCycle(cycle [][]byte, height int64) {
+	// Add bootstrap cycle to the cycle buffer.
+	s.cycleBufferLock.Lock()
+	s.cycleBuffer = make([][]byte, len(cycle))
+	copy(s.cycleBuffer, cycle)
+	s.bufferHeadHeight = height
+	s.bufferTailHeight = height - int64(len(cycle)) + 1
+	s.cycleBufferLock.Unlock()
+	// Define current cycle.
 	s.currentCycle = make([][]byte, len(cycle))
 	copy(s.currentCycle, cycle)
 	s.cycleComplete = true
@@ -397,11 +399,7 @@ func (s *state) Start() {
 	defer logging.InfoLog.Print("Main loop of cycle authority exited gracefully.")
 	defer s.ctxt.WaitGroup.Done()
 	logging.InfoLog.Print("Starting main loop of cycle authority.")
-	bootstrapTicker := &time.Ticker{}
-	if s.ctxt.RunMode() != interfaces.RunModeArchive {
-		s.bootstrapCycle()
-		bootstrapTicker = time.NewTicker(4 * time.Second)
-	}
+	bootstrapTicker := time.NewTicker(4 * time.Second)
 	done := false
 	for !done {
 		select {
@@ -411,11 +409,14 @@ func (s *state) Start() {
 				m.ReplyChannel <- messages.NewInternalMessage(localMessageGetCurrentCycleLength, len(s.currentCycle))
 			case localMessageVerifierInCurrentCycle:
 				m.ReplyChannel <- messages.NewInternalMessage(localMessageVerifierInCurrentCycle, s.verifierInCurrentCycle(m.Payload[0].([]byte)))
+			case localMessageHasCycleAt:
+				foundCycle, _, _, _, _ := s.findCycleAt(m.Payload[0].(*blockchain_data.Block))
+				m.ReplyChannel <- messages.NewInternalMessage(localMessageHasCycleAt, foundCycle)
 			case messages.TypeInternalNewFrozenEdgeBlock:
 				block := m.Payload[0].(*blockchain_data.Block)
 				// for s.winningBootstrapHeight, we already know the cycle, for all others...
 				if block.Height < s.winningBootstrapHeight {
-					// block authority decided to catch up, we abandon the bootstrap cycle
+					// Block authority decided to catch up, we abandon the bootstrap cycle.
 					s.winningBootstrapHeight = 0
 					s.currentCycle = make([][]byte, 0, 0)
 					s.cycleComplete = false
@@ -436,12 +437,14 @@ func (s *state) Start() {
 			}
 		case <-bootstrapTicker.C:
 			if s.winningBootstrapHeight > 0 {
-				s.setBootstrapCycle(s.winningBootstrapCycle)
+				s.setBootstrapCycle(s.winningBootstrapCycle, s.winningBootstrapHeight)
 				router.Router.RouteInternal(messages.NewInternalMessage(messages.TypeInternalBootstrapBlock, s.winningBootstrapHeight, s.winningBootstrapHash))
 				logging.InfoLog.Printf("Cycle authority exited bootstrap phase, consensus cycle length: %d, consensus frozen edge: %d.", len(s.winningBootstrapCycle), s.winningBootstrapHeight)
 				bootstrapTicker.Stop()
-			} else {
+			} else if s.ctxt.RunMode() != interfaces.RunModeArchive {
 				s.bootstrapCycle()
+			} else {
+				bootstrapTicker.Stop()
 			}
 		}
 	}
@@ -458,9 +461,9 @@ func (s *state) Initialize() error {
 	router.Router.AddInternalRoute(messages.TypeInternalChainInitialized, s.internalMessageChannel)
 	router.Router.AddInternalRoute(localMessageGetCurrentCycleLength, s.internalMessageChannel)
 	router.Router.AddInternalRoute(localMessageVerifierInCurrentCycle, s.internalMessageChannel)
+	router.Router.AddInternalRoute(localMessageHasCycleAt, s.internalMessageChannel)
 	s.currentCycle = make([][]byte, 0, 0)
 	s.cycleBuffer = make([][]byte, 0, 0)
-	s.bufferTailHeight = -1
 	s.bufferHeadHeight = -1
 	return nil
 }

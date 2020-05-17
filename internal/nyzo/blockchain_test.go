@@ -48,6 +48,10 @@ func (s *MockCycleAuthority) DetermineContinuityForBlock(block *blockchain_data.
 	return 1
 }
 
+func (s *MockCycleAuthority) HasCycleAt(block *blockchain_data.Block) bool {
+	return true
+}
+
 /*
 Test verification of the first 10K blocks.
 */

@@ -96,6 +96,9 @@ func (s *mockCycleAuthorityState) GetCycleInformationForBlock(block *blockchain_
 func (s *mockCycleAuthorityState) DetermineContinuityForBlock(block *blockchain_data.Block) int {
 	return 0
 }
+func (s *mockCycleAuthorityState) HasCycleAt(block *blockchain_data.Block) bool {
+	return true
+}
 func (s *mockCycleAuthorityState) Initialize() error {
 	return nil
 }

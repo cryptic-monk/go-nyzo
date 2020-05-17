@@ -392,24 +392,29 @@ func (s *state) loadHistoricalChain(dataStoreHeight int64) {
 			}
 		}
 	}
-	s.chainLoaded = true
-	// skip initialization (bootstrapping)
 	s.setChainIsInitialized()
+	s.chainLoaded = true
 }
 
-// Load chain from individual block files if possible.
-func (s *state) loadChainFromDisk() {
-	height := block_file_handler.FindHighestIndividualBlockFile()
-	if height > 0 {
-		block := s.ctxt.BlockFileHandler.GetBlock(height)
-		balanceList := s.ctxt.BlockFileHandler.GetBalanceList(height)
-		if block != nil && balanceList != nil {
-			// This will indirectly cache the entire chain until cycle information can be calculated, if possible.
+// Initialize chain from disk if useful. Otherwise send a bootstrap block request.
+func (s *state) initializeChainAt(height int64) {
+	diskHeight := block_file_handler.FindHighestIndividualBlockFile()
+	if diskHeight > 0 && diskHeight >= height-int64(s.ctxt.CycleAuthority.GetCurrentCycleLength())*4 {
+		logging.InfoLog.Print("Attempting to restart chain from disk, this could take a while...")
+		block := s.ctxt.BlockFileHandler.GetBlock(diskHeight)
+		balanceList := s.ctxt.BlockFileHandler.GetBalanceList(diskHeight)
+		if block != nil && balanceList != nil && s.ctxt.CycleAuthority.HasCycleAt(block) {
 			s.freezeBlock(block, balanceList)
+			s.setChainIsInitialized()
+			logging.InfoLog.Printf("Chain restarted from disk: %d.", diskHeight)
+		} else {
+			logging.InfoLog.Print("Could not restart chain from disk, historical data incomplete.")
 		}
 	}
+	if !s.chainInitialized {
+		s.sendBootstrapBlockRequest()
+	}
 	s.chainLoaded = true
-	logging.InfoLog.Printf("Chain loaded from disk to height: %d, cycle information present: %t.", s.frozenEdgeHeight, s.frozenEdgeBlock.CycleInformation != nil)
 }
 
 // Main loop
@@ -424,12 +429,7 @@ func (s *state) Start() {
 		s.managedVerifierStatus[i] = new(networking.ManagedVerifierStatus)
 		s.managedVerifierStatus[i].QueryHistory = make([]int, queryHistoryLength)
 	}
-	// Load highest previous height from disk.
-	if s.ctxt.RunMode() != interfaces.RunModeArchive {
-		go s.loadChainFromDisk()
-	}
 	s.blockSpeedTracker = time.Now().UnixNano() / 1000000
-	// chain watcher ticker (also used during bootstrapping
 	chainWatcherTicker := time.NewTicker(2 * time.Second)
 	done := false
 	for !done {
@@ -438,14 +438,22 @@ func (s *state) Start() {
 			switch m.Type {
 			case messages.TypeInternalDataStoreHeight:
 				if s.ctxt.RunMode() == interfaces.RunModeArchive {
+					// "Bottom up" bootstrapping: to ensure an unbroken chain, we start from the highest block
+					// in the data store. Run mode check isn't strictly necessary, but better safe than sorry.
 					dataStoreHeight := m.Payload[0].(int64)
-					logging.InfoLog.Printf("Block authority bootstrapping in archive mode, starting with highest data store block: %d.", dataStoreHeight)
+					logging.InfoLog.Printf("Bootstrapping in archive mode, starting with highest data store block: %d.", dataStoreHeight)
 					s.ctxt.WaitGroup.Add(1)
 					go s.loadHistoricalChain(dataStoreHeight)
 				}
 			case messages.TypeInternalBootstrapBlock:
-				s.bootstrapFrozenEdgeHeight = m.Payload[0].(int64)
-				s.bootstrapFrozenEdgeHash = m.Payload[1].([]byte)
+				if s.ctxt.RunMode() == interfaces.RunModeSentinel {
+					// "Top down" bootstrapping: we try to restart the chain from disk, or get a bootstrap block.
+					// Will probably apply to other run modes too.
+					s.bootstrapFrozenEdgeHeight = m.Payload[0].(int64)
+					s.bootstrapFrozenEdgeHash = m.Payload[1].([]byte)
+					// not protected by WaitGroup, if we exit, we exit
+					go s.initializeChainAt(s.bootstrapFrozenEdgeHeight)
+				}
 			case messages.TypeInternalExiting:
 				done = true
 			}
@@ -457,26 +465,18 @@ func (s *state) Start() {
 				s.processBlockWithVotesResponse(m)
 			}
 		case <-chainWatcherTicker.C:
-			if s.ctxt.RunMode() == interfaces.RunModeSentinel && !s.chainInitialized && s.chainLoaded && s.bootstrapFrozenEdgeHeight > 0 {
-				// Sentinel: chain loaded from disk, and we know the frozen edge. Now let's determine if we start afresh or catch up.
-				if s.frozenEdgeHeight < s.bootstrapFrozenEdgeHeight-int64(s.ctxt.CycleAuthority.GetCurrentCycleLength())*4 {
-					// Our local frozen edge is too old, not worth catching up to.
-					logging.InfoLog.Printf("Block authority bootstrapping in sentinel mode, local frozen edge is too far away from consensus, getting bootstrap block at %d.", s.bootstrapFrozenEdgeHeight)
-					s.sendBootstrapBlockRequest()
-				} else {
-					// Local frozen edge is fine, let's catch up to the chain.
-					logging.InfoLog.Printf("Block authority bootstrapping in sentinel mode, catching up from height %d.", s.frozenEdgeHeight)
-					s.setChainIsInitialized()
-				}
-			} else if s.chainInitialized {
-				// Chain ready for regular ops.
-				if s.ctxt.RunMode() == interfaces.RunModeArchive || s.ctxt.RunMode() == interfaces.RunModeSentinel {
-					// These run modes just watch the chain on a timer.
-					s.watchChain()
-				} else {
-					// Initialization done for other run modes, we'll track the consensus.
-					chainWatcherTicker.Stop()
-				}
+			if !s.chainLoaded {
+				continue
+			}
+			if !s.chainInitialized {
+				// this can only mean that a previous bootstrap request failed
+				s.sendBootstrapBlockRequest()
+			} else if s.ctxt.RunMode() == interfaces.RunModeArchive || s.ctxt.RunMode() == interfaces.RunModeSentinel {
+				// these modes just watch the chain
+				s.watchChain()
+			} else {
+				// initialization done
+				chainWatcherTicker.Stop()
 			}
 		}
 	}
