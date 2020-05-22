@@ -268,7 +268,7 @@ func (s *state) processBlockWithVotesResponse(message *messages.Message) {
 			}
 		}
 		logging.TraceLog.Printf("Verified block with votes at height %d, vote threshold: %d, valid votes %d.", blockResponseContent.Block.Height, voteThreshold, voteCount)
-		if voteCount > voteThreshold {
+		if voteCount > voteThreshold && bytes.Equal(blockResponseContent.Block.PreviousBlockHash, s.frozenEdgeBlock.Hash) {
 			s.freezeBlock(blockResponseContent.Block, nil)
 		}
 	} else {
