@@ -6,6 +6,7 @@ package message_fields
 import (
 	"encoding/binary"
 	"net"
+	"os"
 )
 
 func SerializeInt16(number int16) []byte {
@@ -18,6 +19,15 @@ func DeserializeInt16(bytes []byte) int16 {
 	return int16(binary.BigEndian.Uint16(bytes))
 }
 
+func Int16FromFile(f *os.File) (int16, error) {
+	b := make([]byte, 2)
+	_, err := f.Read(b)
+	if err != nil {
+		return 0, err
+	}
+	return DeserializeInt16(b), nil
+}
+
 func SerializeInt32(number int32) []byte {
 	buffer := make([]byte, 4)
 	binary.BigEndian.PutUint32(buffer, uint32(number))
@@ -26,6 +36,15 @@ func SerializeInt32(number int32) []byte {
 
 func DeserializeInt32(bytes []byte) int32 {
 	return int32(binary.BigEndian.Uint32(bytes))
+}
+
+func Int32FromFile(f *os.File) (int32, error) {
+	b := make([]byte, 4)
+	_, err := f.Read(b)
+	if err != nil {
+		return 0, err
+	}
+	return DeserializeInt32(b), nil
 }
 
 func SerializeInt64(number int64) []byte {
@@ -38,6 +57,15 @@ func DeserializeInt64(bytes []byte) int64 {
 	return int64(binary.BigEndian.Uint64(bytes))
 }
 
+func Int64FromFile(f *os.File) (int64, error) {
+	b := make([]byte, 8)
+	_, err := f.Read(b)
+	if err != nil {
+		return 0, err
+	}
+	return DeserializeInt64(b), nil
+}
+
 func SerializeBool(b bool) []byte {
 	if b {
 		return []byte{1}
@@ -48,6 +76,15 @@ func SerializeBool(b bool) []byte {
 
 func DeserializeBool(bytes []byte) bool {
 	return bytes[0] == 1
+}
+
+func BoolFromFile(f *os.File) (bool, error) {
+	b := make([]byte, 1)
+	_, err := f.Read(b)
+	if err != nil {
+		return false, err
+	}
+	return DeserializeBool(b), nil
 }
 
 func SerializedStringLength(s string, maxLength int) int {
@@ -114,4 +151,28 @@ func AllZeroes(b []byte) bool {
 		}
 	}
 	return true
+}
+
+func NodeIdFromFile(f *os.File) ([]byte, error) {
+	b := make([]byte, SizeNodeIdentifier)
+	_, err := f.Read(b)
+	return b, err
+}
+
+func HashFromFile(f *os.File) ([]byte, error) {
+	b := make([]byte, SizeHash)
+	_, err := f.Read(b)
+	return b, err
+}
+
+func SignatureFromFile(f *os.File) ([]byte, error) {
+	b := make([]byte, SizeSignature)
+	_, err := f.Read(b)
+	return b, err
+}
+
+func ByteFromFile(f *os.File) (byte, error) {
+	b := make([]byte, 1)
+	_, err := f.Read(b)
+	return b[0], err
 }
