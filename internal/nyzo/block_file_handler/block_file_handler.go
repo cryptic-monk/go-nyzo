@@ -202,12 +202,12 @@ func (s *state) blockFromIndividualFile(height int64) *blockchain_data.Block {
 		// fail silently if the file does not exist, as this is a normal situation
 		return nil
 	}
-	raw, err := ioutil.ReadFile(fileName)
+	f, err := os.Open(fileName)
 	if err != nil {
 		logging.ErrorLog.Printf("Unable to load block from file: %s.", err.Error())
 		return nil
 	}
-	block, _ := blockchain_data.NewBlockFromBytes(raw[2:])
+	block, _ := blockchain_data.NewBlockFromIndividualFile(f)
 	if block == nil {
 		logging.ErrorLog.Printf("Unable to load block from file %s.", fileName)
 	}

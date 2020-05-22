@@ -10,6 +10,7 @@ import (
 	"github.com/cryptic-monk/go-nyzo/internal/logging"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
+	"os"
 )
 
 const (
@@ -44,6 +45,17 @@ func NewBlockFromBytes(data []byte) (*Block, int) {
 		return nil, 0
 	} else {
 		return b, consumed
+	}
+}
+
+// Create a new block from an individual block file (more efficient than reading the whole file first).
+func NewBlockFromIndividualFile(f *os.File) (*Block, error) {
+	b := &Block{}
+	err := b.FromIndividualFile(f)
+	if err != nil {
+		return nil, err
+	} else {
+		return b, nil
 	}
 }
 
@@ -130,4 +142,80 @@ func (b *Block) FromBytes(data []byte) (int, error) {
 	doubleSha := utilities.DoubleSha256(b.VerifierSignature)
 	b.Hash = doubleSha[:]
 	return position, nil
+}
+
+// Serializable interface: read from an individual block file.
+func (b *Block) FromIndividualFile(f *os.File) error {
+	// discard block count, it's an individual block file
+	bytes := make([]byte, 2)
+	_, err := f.Read(bytes)
+	if err != nil {
+		return err
+	}
+	bytes = make([]byte, message_fields.SizeShlong)
+	_, err = f.Read(bytes)
+	if err != nil {
+		return err
+	}
+	combined := message_fields.DeserializeInt64(bytes)
+	b.BlockchainVersion, b.Height = FromShlong(combined)
+	if b.BlockchainVersion < minimumBlockchainVersion || b.BlockchainVersion > maximumBlockchainVersion {
+		return errors.New(fmt.Sprintf("block has unknown blockchain version %d", b.BlockchainVersion))
+	}
+	bytes = make([]byte, message_fields.SizeHash)
+	_, err = f.Read(bytes)
+	if err != nil {
+		return err
+	}
+	b.PreviousBlockHash = bytes
+	bytes = make([]byte, message_fields.SizeTimestamp)
+	_, err = f.Read(bytes)
+	if err != nil {
+		return err
+	}
+	b.StartTimestamp = message_fields.DeserializeInt64(bytes)
+	bytes = make([]byte, message_fields.SizeTimestamp)
+	_, err = f.Read(bytes)
+	if err != nil {
+		return err
+	}
+	b.VerificationTimestamp = message_fields.DeserializeInt64(bytes)
+	bytes = make([]byte, message_fields.SizeUnnamedInt32)
+	_, err = f.Read(bytes)
+	if err != nil {
+		return err
+	}
+	transactionCount := int(message_fields.DeserializeInt32(bytes))
+	b.Transactions = make([]*Transaction, 0, transactionCount)
+	for i := 0; i < transactionCount; i++ {
+		t := &Transaction{}
+		err := t.FromFile(f, false)
+		if err != nil {
+			return err
+		}
+		b.Transactions = append(b.Transactions, t)
+	}
+	bytes = make([]byte, message_fields.SizeHash)
+	_, err = f.Read(bytes)
+	if err != nil {
+		return err
+	}
+	b.BalanceListHash = bytes
+	bytes = make([]byte, message_fields.SizeNodeIdentifier)
+	_, err = f.Read(bytes)
+	if err != nil {
+		return err
+	}
+	b.VerifierIdentifier = bytes
+	bytes = make([]byte, message_fields.SizeSignature)
+	_, err = f.Read(bytes)
+	if err != nil {
+		return err
+	}
+	b.VerifierSignature = bytes
+	b.SignatureState = Undetermined
+	b.ContinuityState = Undetermined
+	doubleSha := utilities.DoubleSha256(b.VerifierSignature)
+	b.Hash = doubleSha[:]
+	return nil
 }
