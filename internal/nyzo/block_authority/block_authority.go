@@ -43,6 +43,7 @@ type state struct {
 	chainInitialized          bool                                // true once the chain is ready for operation (ready to be added to)
 	managedVerifiers          []*networking.ManagedVerifier       // handled by node manager, copied here for mere convenience
 	managedVerifierStatus     []*networking.ManagedVerifierStatus // status tracked by block fetching process
+	lastBlockRequestedTime    int64 // last block with votes request
 	blockSpeedTracker         int64                               // tracks block speed (important e.g. during historical loading/catchup)
 	lastSpeedTrackingBlock    int64
 	fastChainInitialization   bool // read from preferences file, set to true to speedup chain initialization (especially historical loading in archive mode), at the cost of some (pretty theoretical) security
@@ -213,10 +214,16 @@ func (s *state) watchChain() {
 			}
 		}
 	}
-	//logging.TraceLog.Printf("Sending next block request for height %d to random cycle node.", s.frozenEdgeHeight+1)
-	//blockRequestContent := message_content.NewBlockWithVotesRequest(s.frozenEdgeHeight + 1)
-	//messageBlockRequest := messages.NewLocal(messages.TypeBlockWithVotesRequest, blockRequestContent, s.ctxt.Identity)
-	//router.Router.RouteInternal(messages.NewInternalMessage(messages.TypeInternalSendToRandomNode, messageBlockRequest))
+
+	// Fallback: if we fall more than 35s behind the frozen edge, we request a block with votes from a random node.
+	timestamp := time.Now().UnixNano() / 1000000
+	if s.lastBlockRequestedTime < timestamp-blockUpdateIntervalStandard && s.frozenEdgeBlock.VerificationTimestamp < timestamp-35000 {
+		logging.TraceLog.Printf("Sending block with votes request for height %d to random cycle node.", s.frozenEdgeHeight+1)
+		s.lastBlockRequestedTime = timestamp
+		blockRequestContent := message_content.NewBlockWithVotesRequest(s.frozenEdgeHeight + 1)
+		messageBlockRequest := messages.NewLocal(messages.TypeBlockWithVotesRequest, blockRequestContent, s.ctxt.Identity)
+		router.Router.RouteInternal(messages.NewInternalMessage(messages.TypeInternalSendToRandomNode, messageBlockRequest))
+	}
 }
 
 // Try to get new block(s) from the managed verifier with the index i, 1 block in regular mode, 10 in fast fetch mode.
