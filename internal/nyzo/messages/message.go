@@ -105,12 +105,12 @@ func NewFromBytes(bytes []byte, sourceAddress string) (*Message, error) {
 			return nil, err
 		}
 	}
-	message.SourceId = bytes[position : position+message_fields.SizeNodeIdentifier]
+	message.SourceId = utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 	position += message_fields.SizeNodeIdentifier
 	if message_fields.AllZeroes(message.SourceId) {
 		return nil, errors.New("cannot convert incoming message, source ID is all zeroes")
 	}
-	message.Signature = bytes[position : position+message_fields.SizeSignature]
+	message.Signature = utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
 	// TODO: like the Java version, we re-serialize here to check the signature. This is very costly (but safer).
 	if !ed25519.Verify(message.SourceId, message.SerializeForSigning(), message.Signature) {
 		return nil, errors.New("message signature invalid, source address: " + sourceAddress)

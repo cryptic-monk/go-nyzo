@@ -187,7 +187,7 @@ func (t *Transaction) FromBytes(b []byte, balanceListCycleTransaction bool) (int
 		}
 		t.Amount = message_fields.DeserializeInt64(b[position : position+message_fields.SizeTransactionAmount])
 		position += message_fields.SizeTransactionAmount
-		t.RecipientId = b[position : position+message_fields.SizeNodeIdentifier]
+		t.RecipientId = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 		position += message_fields.SizeNodeIdentifier
 	}
 	// Coin generation already done here
@@ -201,7 +201,7 @@ func (t *Transaction) FromBytes(b []byte, balanceListCycleTransaction bool) (int
 		t.PreviousHashHeight = message_fields.DeserializeInt64(b[position : position+8])
 		position += message_fields.SizeBlockHeight
 		t.PreviousBlockHash = make([]byte, 0, 0)
-		t.SenderId = b[position : position+message_fields.SizeNodeIdentifier]
+		t.SenderId = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 		position += message_fields.SizeNodeIdentifier
 		senderDataLength := int(b[position])
 		position += message_fields.SizeUnnamedByte
@@ -216,7 +216,7 @@ func (t *Transaction) FromBytes(b []byte, balanceListCycleTransaction bool) (int
 		if len(b)-position < message_fields.SizeSignature {
 			return position, errors.New("invalid transaction data 4")
 		}
-		t.Signature = b[position : position+message_fields.SizeSignature]
+		t.Signature = utilities.ByteArrayCopy(b[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
 		position += message_fields.SizeSignature
 		if t.Type == TransactionTypeCycle {
 			if len(b)-position < message_fields.SizeUnnamedInt32 {
@@ -230,9 +230,9 @@ func (t *Transaction) FromBytes(b []byte, balanceListCycleTransaction bool) (int
 				}
 				t.CycleSignatures = make([]*CycleSignature, 0, signatureCount)
 				for i := 0; i < signatureCount; i++ {
-					identifier := b[position : position+message_fields.SizeNodeIdentifier]
+					identifier := utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 					position += message_fields.SizeNodeIdentifier
-					signature := b[position : position+message_fields.SizeSignature]
+					signature := utilities.ByteArrayCopy(b[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
 					position += message_fields.SizeSignature
 					if !bytes.Equal(identifier, t.SenderId) {
 						t.CycleSignatures = append(t.CycleSignatures, &CycleSignature{identifier, signature})
@@ -248,11 +248,11 @@ func (t *Transaction) FromBytes(b []byte, balanceListCycleTransaction bool) (int
 					cycleSignatureTransaction.Type = TransactionTypeCycleSignature
 					cycleSignatureTransaction.Timestamp = message_fields.DeserializeInt64(b[position : position+message_fields.SizeTimestamp])
 					position += message_fields.SizeTimestamp
-					cycleSignatureTransaction.SenderId = b[position : position+message_fields.SizeNodeIdentifier]
+					cycleSignatureTransaction.SenderId = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 					position += message_fields.SizeNodeIdentifier
 					cycleSignatureTransaction.CycleTransactionVote = message_fields.DeserializeBool(b[position : position+message_fields.SizeBool])
 					position += message_fields.SizeBool
-					cycleSignatureTransaction.Signature = b[position : position+message_fields.SizeSignature]
+					cycleSignatureTransaction.Signature = utilities.ByteArrayCopy(b[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
 					position += message_fields.SizeSignature
 					t.CycleSignatureTransactions = append(t.CycleSignatureTransactions, cycleSignatureTransaction)
 				}
@@ -262,13 +262,13 @@ func (t *Transaction) FromBytes(b []byte, balanceListCycleTransaction bool) (int
 		if len(b)-position < message_fields.SizeNodeIdentifier+message_fields.SizeBool+(message_fields.SizeSignature*2) {
 			return position, errors.New("invalid transaction data 7")
 		}
-		t.SenderId = b[position : position+message_fields.SizeNodeIdentifier]
+		t.SenderId = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 		position += message_fields.SizeNodeIdentifier
 		t.CycleTransactionVote = message_fields.DeserializeBool(b[position : position+message_fields.SizeBool])
 		position += message_fields.SizeBool
-		t.CycleTransactionSignature = b[position : position+message_fields.SizeSignature]
+		t.CycleTransactionSignature = utilities.ByteArrayCopy(b[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
 		position += message_fields.SizeSignature
-		t.Signature = b[position : position+message_fields.SizeSignature]
+		t.Signature = utilities.ByteArrayCopy(b[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
 		position += message_fields.SizeSignature
 	} else {
 		return position, errors.New("invalid transaction data 8, unknown transaction type")

@@ -236,6 +236,16 @@ func TestStoreBlock(t *testing.T) {
 	}
 }
 
+// Test calculating cycle information. This will take a while.
+func TestCycleInformation(t *testing.T) {
+	fmt.Println("Calculating cycle information for block 7200000, this will take a while.")
+	block := ctxt.BlockFileHandler.GetBlock(7200000)
+	cycleInformation := ctxt.CycleAuthority.GetCycleInformationForBlock(block)
+	if cycleInformation == nil {
+		t.Error("Could not calculate cycle information for block 7200000.")
+	}
+}
+
 func init() {
 	configuration.DataDirectory = "../../test/test_data"
 	ctxt = NewDefaultContext()

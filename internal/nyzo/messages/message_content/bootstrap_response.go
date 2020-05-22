@@ -3,6 +3,7 @@ package message_content
 import (
 	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 )
 
 type BootstrapResponse struct {
@@ -40,7 +41,7 @@ func (c *BootstrapResponse) FromBytes(bytes []byte) (int, error) {
 	position := 0
 	c.FrozenEdgeHeight = message_fields.DeserializeInt64(bytes[position : position+message_fields.SizeBlockHeight])
 	position += message_fields.SizeBlockHeight
-	c.FrozenEdgeHash = bytes[position : position+message_fields.SizeHash]
+	c.FrozenEdgeHash = utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeHash], message_fields.SizeHash)
 	position += message_fields.SizeHash
 	count := int(message_fields.DeserializeInt16(bytes[position : position+message_fields.SizeUnnamedInt16]))
 	position += message_fields.SizeUnnamedInt16
@@ -49,7 +50,7 @@ func (c *BootstrapResponse) FromBytes(bytes []byte) (int, error) {
 	}
 	c.CycleVerifiers = make([][]byte, 0, count)
 	for i := 0; i < count; i++ {
-		c.CycleVerifiers = append(c.CycleVerifiers, bytes[position:position+message_fields.SizeNodeIdentifier])
+		c.CycleVerifiers = append(c.CycleVerifiers, utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier))
 		position += message_fields.SizeNodeIdentifier
 	}
 	return position, nil

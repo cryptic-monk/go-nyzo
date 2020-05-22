@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/blockchain_data"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 )
 
 type BlockWithVotesResponse struct {
@@ -72,13 +73,13 @@ func (r *BlockWithVotesResponse) FromBytes(bytes []byte) (int, error) {
 			if len(bytes)-position < message_fields.SizeNodeIdentifier+message_fields.SizeTimestamp*2+message_fields.SizeSignature {
 				return 0, errors.New("invalid block votes response content 4")
 			}
-			identifier := bytes[position : position+message_fields.SizeNodeIdentifier]
+			identifier := utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 			position += message_fields.SizeNodeIdentifier
 			timestamp := message_fields.DeserializeInt64(bytes[position : position+message_fields.SizeTimestamp])
 			position += message_fields.SizeTimestamp
 			messageTimestamp := message_fields.DeserializeInt64(bytes[position : position+message_fields.SizeTimestamp])
 			position += message_fields.SizeTimestamp
-			signature := bytes[position : position+message_fields.SizeSignature]
+			signature := utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
 			position += message_fields.SizeSignature
 			blockVote := blockchain_data.BlockVote{}
 			blockVote.Height = r.Block.Height

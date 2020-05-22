@@ -3,6 +3,7 @@ package message_content
 import (
 	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 )
 
 type NewVerifierVote struct {
@@ -28,6 +29,6 @@ func (c *NewVerifierVote) FromBytes(bytes []byte) (int, error) {
 	if len(bytes) != message_fields.SizeNodeIdentifier {
 		return 0, errors.New("invalid new verifier vote content")
 	}
-	c.Identifier = bytes
+	c.Identifier = utilities.ByteArrayCopy(bytes, message_fields.SizeNodeIdentifier)
 	return message_fields.SizeNodeIdentifier, nil
 }

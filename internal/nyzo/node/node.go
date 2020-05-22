@@ -7,6 +7,7 @@ package node
 import (
 	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 	"time"
 )
 
@@ -78,7 +79,7 @@ func (n *Node) FromBytes(bytes []byte) error {
 		return errors.New("cannot deserialize node info: incorrect amount of data")
 	}
 	position := 0
-	n.Identifier = bytes[position : position+message_fields.SizeNodeIdentifier]
+	n.Identifier = utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 	position += message_fields.SizeNodeIdentifier
 	if message_fields.AllZeroes(n.Identifier) {
 		return errors.New("cannot deserialize node info: source ID is all zeroes")

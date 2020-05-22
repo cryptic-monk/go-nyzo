@@ -8,6 +8,7 @@ package blockchain_data
 import (
 	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 )
 
 type ApprovedCycleTransaction struct {
@@ -49,9 +50,9 @@ func (t *ApprovedCycleTransaction) FromBytes(b []byte) (int, error) {
 		return 0, errors.New("invalid approved cycle transaction data")
 	}
 	position := 0
-	t.InitiatorIdentifier = b[position : position+message_fields.SizeNodeIdentifier]
+	t.InitiatorIdentifier = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 	position += message_fields.SizeNodeIdentifier
-	t.ReceiverIdentifier = b[position : position+message_fields.SizeNodeIdentifier]
+	t.ReceiverIdentifier = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 	position += message_fields.SizeNodeIdentifier
 	t.ApprovalHeight = message_fields.DeserializeInt64(b[position : position+message_fields.SizeBlockHeight])
 	position += message_fields.SizeBlockHeight

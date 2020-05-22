@@ -6,6 +6,7 @@ package blockchain_data
 import (
 	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 )
 
 type BlockVote struct {
@@ -40,7 +41,7 @@ func (b *BlockVote) FromBytes(data []byte) (int, error) {
 	position := 0
 	b.Height = message_fields.DeserializeInt64(data[position : position+message_fields.SizeBlockHeight])
 	position += message_fields.SizeBlockHeight
-	b.Hash = data[position : position+message_fields.SizeHash]
+	b.Hash = utilities.ByteArrayCopy(data[position:position+message_fields.SizeHash], position+message_fields.SizeHash)
 	position += message_fields.SizeHash
 	b.Timestamp = message_fields.DeserializeInt64(data[position : position+message_fields.SizeTimestamp])
 	position += message_fields.SizeTimestamp

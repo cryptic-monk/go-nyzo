@@ -32,3 +32,10 @@ func ByteArrayComparator(a, b []byte) bool {
 	}
 	return result
 }
+
+// Make a clean copy of the <source> byte array with the given length to reduce memory footprint.
+func ByteArrayCopy(source []byte, length int) []byte {
+	result := make([]byte, length)
+	copy(result, source)
+	return result
+}

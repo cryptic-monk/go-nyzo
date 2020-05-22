@@ -150,7 +150,7 @@ func (bl *BalanceList) FromBytes(data []byte) (int, error) {
 	}
 	bl.PreviousVerifiers = make([][]byte, 0, numberOfPreviousVerifiers)
 	for i := 0; i < int(numberOfPreviousVerifiers); i++ {
-		bl.PreviousVerifiers = append(bl.PreviousVerifiers, data[position:position+message_fields.SizeNodeIdentifier])
+		bl.PreviousVerifiers = append(bl.PreviousVerifiers, utilities.ByteArrayCopy(data[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier))
 		position += message_fields.SizeNodeIdentifier
 	}
 	numberOfEntries := message_fields.DeserializeInt32(data[position : position+message_fields.SizeBalanceListLength])
@@ -160,7 +160,7 @@ func (bl *BalanceList) FromBytes(data []byte) (int, error) {
 	}
 	bl.Items = make([]BalanceListItem, 0, numberOfEntries)
 	for i := 0; i < int(numberOfEntries); i++ {
-		id := data[position : position+message_fields.SizeNodeIdentifier]
+		id := utilities.ByteArrayCopy(data[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 		position += message_fields.SizeNodeIdentifier
 		balance := message_fields.DeserializeInt64(data[position : position+message_fields.SizeTransactionAmount])
 		position += message_fields.SizeTransactionAmount

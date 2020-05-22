@@ -98,7 +98,7 @@ func (b *Block) FromBytes(data []byte) (int, error) {
 	if b.BlockchainVersion < minimumBlockchainVersion || b.BlockchainVersion > maximumBlockchainVersion {
 		return position, errors.New(fmt.Sprintf("block has unknown blockchain version %d", b.BlockchainVersion))
 	}
-	b.PreviousBlockHash = data[position : position+message_fields.SizeHash]
+	b.PreviousBlockHash = utilities.ByteArrayCopy(data[position:position+message_fields.SizeHash], message_fields.SizeHash)
 	position += message_fields.SizeHash
 	b.StartTimestamp = message_fields.DeserializeInt64(data[position : position+message_fields.SizeTimestamp])
 	position += message_fields.SizeTimestamp
@@ -119,11 +119,11 @@ func (b *Block) FromBytes(data []byte) (int, error) {
 	if len(data)-position < message_fields.SizeNodeIdentifier+message_fields.SizeSignature+message_fields.SizeHash {
 		return position, errors.New("invalid block data 2")
 	}
-	b.BalanceListHash = data[position : position+message_fields.SizeHash]
+	b.BalanceListHash = utilities.ByteArrayCopy(data[position:position+message_fields.SizeHash], message_fields.SizeHash)
 	position += message_fields.SizeHash
-	b.VerifierIdentifier = data[position : position+message_fields.SizeNodeIdentifier]
+	b.VerifierIdentifier = utilities.ByteArrayCopy(data[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
 	position += message_fields.SizeNodeIdentifier
-	b.VerifierSignature = data[position : position+message_fields.SizeSignature]
+	b.VerifierSignature = utilities.ByteArrayCopy(data[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
 	position += message_fields.SizeSignature
 	b.SignatureState = Undetermined
 	b.ContinuityState = Undetermined

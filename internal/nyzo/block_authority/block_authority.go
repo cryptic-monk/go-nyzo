@@ -43,7 +43,7 @@ type state struct {
 	chainInitialized          bool                                // true once the chain is ready for operation (ready to be added to)
 	managedVerifiers          []*networking.ManagedVerifier       // handled by node manager, copied here for mere convenience
 	managedVerifierStatus     []*networking.ManagedVerifierStatus // status tracked by block fetching process
-	lastBlockRequestedTime    int64 // last block with votes request
+	lastBlockRequestedTime    int64                               // last block with votes request
 	blockSpeedTracker         int64                               // tracks block speed (important e.g. during historical loading/catchup)
 	lastSpeedTrackingBlock    int64
 	fastChainInitialization   bool // read from preferences file, set to true to speedup chain initialization (especially historical loading in archive mode), at the cost of some (pretty theoretical) security

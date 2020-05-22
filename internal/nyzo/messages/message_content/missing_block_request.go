@@ -3,6 +3,7 @@ package message_content
 import (
 	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 )
 
 type MissingBlockRequest struct {
@@ -35,7 +36,7 @@ func (c *MissingBlockRequest) FromBytes(bytes []byte) (int, error) {
 	position := 0
 	c.Height = message_fields.DeserializeInt64(bytes[position : position+message_fields.SizeBlockHeight])
 	position += message_fields.SizeBlockHeight
-	c.Hash = bytes[position : position+message_fields.SizeHash]
+	c.Hash = utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeHash], message_fields.SizeHash)
 	position += message_fields.SizeHash
 	return position, nil
 }
