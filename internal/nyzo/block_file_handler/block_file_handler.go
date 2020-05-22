@@ -207,9 +207,10 @@ func (s *state) blockFromIndividualFile(height int64) *blockchain_data.Block {
 		logging.ErrorLog.Printf("Unable to load block from file: %s.", err.Error())
 		return nil
 	}
-	block, _ := blockchain_data.NewBlockFromIndividualFile(f)
-	if block == nil {
-		logging.ErrorLog.Printf("Unable to load block from file %s.", fileName)
+	defer f.Close()
+	block, err := blockchain_data.NewBlockFromIndividualFile(f)
+	if err != nil {
+		logging.ErrorLog.Print(err)
 	}
 	return block
 }
