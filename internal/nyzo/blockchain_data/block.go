@@ -152,40 +152,31 @@ func (b *Block) FromIndividualFile(f *os.File) error {
 	if err != nil {
 		return err
 	}
-	bytes = make([]byte, message_fields.SizeShlong)
-	_, err = f.Read(bytes)
+	combined, err := message_fields.Int64FromFile(f)
 	if err != nil {
 		return err
 	}
-	combined := message_fields.DeserializeInt64(bytes)
 	b.BlockchainVersion, b.Height = FromShlong(combined)
 	if b.BlockchainVersion < minimumBlockchainVersion || b.BlockchainVersion > maximumBlockchainVersion {
 		return errors.New(fmt.Sprintf("block has unknown blockchain version %d", b.BlockchainVersion))
 	}
-	bytes = make([]byte, message_fields.SizeHash)
-	_, err = f.Read(bytes)
+	b.PreviousBlockHash, err = message_fields.HashFromFile(f)
 	if err != nil {
 		return err
 	}
-	b.PreviousBlockHash = bytes
-	bytes = make([]byte, message_fields.SizeTimestamp)
-	_, err = f.Read(bytes)
+	b.StartTimestamp, err = message_fields.Int64FromFile(f)
 	if err != nil {
 		return err
 	}
-	b.StartTimestamp = message_fields.DeserializeInt64(bytes)
-	bytes = make([]byte, message_fields.SizeTimestamp)
-	_, err = f.Read(bytes)
+	b.VerificationTimestamp, err = message_fields.Int64FromFile(f)
 	if err != nil {
 		return err
 	}
-	b.VerificationTimestamp = message_fields.DeserializeInt64(bytes)
-	bytes = make([]byte, message_fields.SizeUnnamedInt32)
-	_, err = f.Read(bytes)
+	tc, err := message_fields.Int32FromFile(f)
 	if err != nil {
 		return err
 	}
-	transactionCount := int(message_fields.DeserializeInt32(bytes))
+	transactionCount := int(tc)
 	b.Transactions = make([]*Transaction, 0, transactionCount)
 	for i := 0; i < transactionCount; i++ {
 		t := &Transaction{}
@@ -195,24 +186,18 @@ func (b *Block) FromIndividualFile(f *os.File) error {
 		}
 		b.Transactions = append(b.Transactions, t)
 	}
-	bytes = make([]byte, message_fields.SizeHash)
-	_, err = f.Read(bytes)
+	b.BalanceListHash, err = message_fields.HashFromFile(f)
 	if err != nil {
 		return err
 	}
-	b.BalanceListHash = bytes
-	bytes = make([]byte, message_fields.SizeNodeIdentifier)
-	_, err = f.Read(bytes)
+	b.VerifierIdentifier, err = message_fields.NodeIdFromFile(f)
 	if err != nil {
 		return err
 	}
-	b.VerifierIdentifier = bytes
-	bytes = make([]byte, message_fields.SizeSignature)
-	_, err = f.Read(bytes)
+	b.VerifierSignature, err = message_fields.SignatureFromFile(f)
 	if err != nil {
 		return err
 	}
-	b.VerifierSignature = bytes
 	b.SignatureState = Undetermined
 	b.ContinuityState = Undetermined
 	doubleSha := utilities.DoubleSha256(b.VerifierSignature)
