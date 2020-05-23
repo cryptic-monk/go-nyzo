@@ -1,5 +1,10 @@
 package message_content
 
+import (
+	"io"
+	"io/ioutil"
+)
+
 // default message content if we don't know how to serialize/deserialize it
 type Default struct {
 	Content []byte
@@ -16,7 +21,8 @@ func (c *Default) ToBytes() []byte {
 }
 
 // Serializable interface: from data bytes.
-func (c *Default) FromBytes(bytes []byte) (int, error) {
-	c.Content = bytes
-	return len(bytes), nil
+func (c *Default) Read(r io.Reader) error {
+	var err error
+	c.Content, err = ioutil.ReadAll(r)
+	return err
 }

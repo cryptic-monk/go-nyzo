@@ -1,8 +1,8 @@
 package message_content
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"io"
 )
 
 type NodeJoinResponseLegacy struct {
@@ -31,30 +31,28 @@ func (c *NodeJoinResponseLegacy) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (c *NodeJoinResponseLegacy) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) < message_fields.SizeStringLength+message_fields.SizePort+message_fields.SizeVoteListLength+c.NewVerifierVote.GetSerializedLength() {
-		return 0, errors.New("invalid node join response legacy content")
+func (c *NodeJoinResponseLegacy) Read(r io.Reader) error {
+	var err error
+	c.Nickname, err = message_fields.ReadString(r)
+	if err != nil {
+		return err
 	}
-	position := 0
-	var bytesConsumed int
-	c.Nickname, bytesConsumed = message_fields.DeserializeString(bytes[position:])
-	position += bytesConsumed
-	if len(bytes)-position < message_fields.SizePort+message_fields.SizeVoteListLength+c.NewVerifierVote.GetSerializedLength() {
-		return position, errors.New("invalid node join response legacy content")
+	c.Port, err = message_fields.ReadInt32(r)
+	if err != nil {
+		return err
 	}
-	c.Port = message_fields.DeserializeInt32(bytes[position : position+message_fields.SizePort])
-	position += message_fields.SizePort
-	// legacy: discard block votes if there are any. we don't even deserialize them
-	votes := bytes[position]
+	// legacy: discard block votes if there are any.
+	votes, err := message_fields.ReadByte(r)
+	if err != nil {
+		return err
+	}
 	for i := 0; i < int(votes); i++ {
-		position += message_fields.SizeBlockHeight + message_fields.SizeHash + message_fields.SizeTimestamp
+		_, err = message_fields.ReadBytes(r, message_fields.SizeBlockHeight+message_fields.SizeHash+message_fields.SizeTimestamp)
+		if err != nil {
+			return err
+		}
 	}
 	c.NewVerifierVote = NewVerifierVote{}
-	if len(bytes)-position != c.NewVerifierVote.GetSerializedLength() {
-		return position, errors.New("invalid node join response legacy content")
-	}
-	var consumed int
-	consumed, err := c.NewVerifierVote.FromBytes(bytes[position:])
-	position += consumed
-	return consumed, err
+	err = c.NewVerifierVote.Read(r)
+	return err
 }

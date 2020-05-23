@@ -1,8 +1,8 @@
 package message_content
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"io"
 )
 
 type NodeJoinResponse struct {
@@ -30,20 +30,16 @@ func (c *NodeJoinResponse) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (c *NodeJoinResponse) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) < message_fields.SizeStringLength+message_fields.SizePort*2 {
-		return 0, errors.New("invalid node join v2 content")
+func (c *NodeJoinResponse) Read(r io.Reader) error {
+	var err error
+	c.Nickname, err = message_fields.ReadString(r)
+	if err != nil {
+		return err
 	}
-	position := 0
-	var bytesConsumed int
-	c.Nickname, bytesConsumed = message_fields.DeserializeString(bytes[position:])
-	position += bytesConsumed
-	if len(bytes)-bytesConsumed < message_fields.SizePort*2 {
-		return position, errors.New("invalid node join v2 content")
+	c.PortTcp, err = message_fields.ReadInt32(r)
+	if err != nil {
+		return err
 	}
-	c.PortTcp = message_fields.DeserializeInt32(bytes[position : position+message_fields.SizePort])
-	position += message_fields.SizePort
-	c.PortUdp = message_fields.DeserializeInt32(bytes[position : position+message_fields.SizePort])
-	position += message_fields.SizePort
-	return position, nil
+	c.PortUdp, err = message_fields.ReadInt32(r)
+	return err
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/blockchain_data"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"io"
 )
 
 type BlockResponse struct {
@@ -44,40 +45,34 @@ func (c *BlockResponse) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (c *BlockResponse) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) < message_fields.SizeBool+message_fields.SizeFrozenBlockListLength {
-		return 0, errors.New("invalid block response content 1")
+func (c *BlockResponse) Read(r io.Reader) error {
+	hasBalanceList, err := message_fields.ReadBool(r)
+	if err != nil {
+		return err
 	}
-	var bytesConsumed int
-	position := message_fields.SizeBool
-	if bytes[0] == 1 {
-		c.BalanceList, bytesConsumed = blockchain_data.NewBalanceListFromBytes(bytes[position:])
-		if c.BalanceList == nil {
-			return 0, errors.New("invalid block response content 2")
-		} else {
-			position += bytesConsumed
+	if hasBalanceList {
+		c.BalanceList, err = blockchain_data.ReadNewBalanceList(r)
+		if err != nil {
+			return err
 		}
 	}
-	if len(bytes)-position < message_fields.SizeFrozenBlockListLength {
-		return 0, errors.New("invalid block response content 3")
+	blockCount, err := message_fields.ReadInt16(r)
+	if err != nil {
+		return err
 	}
-	blockCount := message_fields.DeserializeInt16(bytes[position : position+message_fields.SizeFrozenBlockListLength])
-	position += message_fields.SizeFrozenBlockListLength
 	if blockCount < 0 {
-		return 0, errors.New(fmt.Sprintf("invalid block count in block response: %d", blockCount))
+		return errors.New(fmt.Sprintf("invalid block count in block response: %d", blockCount))
 	}
 	if blockCount > 10 {
 		blockCount = 10
 	}
 	c.Blocks = make([]*blockchain_data.Block, 0, blockCount)
 	for i := 0; i < int(blockCount); i++ {
-		block, bytesConsumed := blockchain_data.NewBlockFromBytes(bytes[position:])
-		if block == nil {
-			return 0, errors.New("invalid block response content 5")
-		} else {
-			c.Blocks = append(c.Blocks, block)
-			position += bytesConsumed
+		block, err := blockchain_data.ReadNewBlock(r)
+		if err != nil {
+			return err
 		}
+		c.Blocks = append(c.Blocks, block)
 	}
-	return position, nil
+	return nil
 }

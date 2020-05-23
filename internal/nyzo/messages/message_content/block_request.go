@@ -1,8 +1,8 @@
 package message_content
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"io"
 )
 
 type BlockRequest struct {
@@ -30,16 +30,19 @@ func (c *BlockRequest) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (c *BlockRequest) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) < c.GetSerializedLength() {
-		return 0, errors.New("invalid block request content")
+func (c *BlockRequest) Read(r io.Reader) error {
+	var err error
+	c.StartHeight, err = message_fields.ReadInt64(r)
+	if err != nil {
+		return err
 	}
-	position := 0
-	c.StartHeight = message_fields.DeserializeInt64(bytes[position : position+message_fields.SizeBlockHeight])
-	position += message_fields.SizeBlockHeight
-	c.EndHeight = message_fields.DeserializeInt64(bytes[position : position+message_fields.SizeBlockHeight])
-	position += message_fields.SizeBlockHeight
-	c.IncludeBalanceList = message_fields.DeserializeBool(bytes[position : position+message_fields.SizeUnnamedByte])
-	position += message_fields.SizeUnnamedByte
-	return position, nil
+	c.EndHeight, err = message_fields.ReadInt64(r)
+	if err != nil {
+		return err
+	}
+	c.IncludeBalanceList, err = message_fields.ReadBool(r)
+	if err != nil {
+		return err
+	}
+	return nil
 }

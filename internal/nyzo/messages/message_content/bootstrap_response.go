@@ -1,9 +1,8 @@
 package message_content
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
-	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
+	"io"
 )
 
 type BootstrapResponse struct {
@@ -34,24 +33,27 @@ func (c *BootstrapResponse) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (c *BootstrapResponse) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) < message_fields.SizeBlockHeight+message_fields.SizeHash+message_fields.SizeUnnamedInt16 {
-		return 0, errors.New("invalid bootstrap request content 1")
+func (c *BootstrapResponse) Read(r io.Reader) error {
+	var err error
+	c.FrozenEdgeHeight, err = message_fields.ReadInt64(r)
+	if err != nil {
+		return err
 	}
-	position := 0
-	c.FrozenEdgeHeight = message_fields.DeserializeInt64(bytes[position : position+message_fields.SizeBlockHeight])
-	position += message_fields.SizeBlockHeight
-	c.FrozenEdgeHash = utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeHash], message_fields.SizeHash)
-	position += message_fields.SizeHash
-	count := int(message_fields.DeserializeInt16(bytes[position : position+message_fields.SizeUnnamedInt16]))
-	position += message_fields.SizeUnnamedInt16
-	if len(bytes)-position < count*message_fields.SizeNodeIdentifier {
-		return position, errors.New("invalid bootstrap request content 2")
+	c.FrozenEdgeHash, err = message_fields.ReadHash(r)
+	if err != nil {
+		return err
+	}
+	count, err := message_fields.ReadInt16(r)
+	if err != nil {
+		return err
 	}
 	c.CycleVerifiers = make([][]byte, 0, count)
-	for i := 0; i < count; i++ {
-		c.CycleVerifiers = append(c.CycleVerifiers, utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier))
-		position += message_fields.SizeNodeIdentifier
+	for i := 0; i < int(count); i++ {
+		id, err := message_fields.ReadNodeId(r)
+		if err != nil {
+			return err
+		}
+		c.CycleVerifiers = append(c.CycleVerifiers, id)
 	}
-	return position, nil
+	return nil
 }

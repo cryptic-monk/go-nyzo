@@ -24,14 +24,14 @@ func TestSigning(t *testing.T) {
 // Read dumped messages, check their signatures and occasionally content just to make sure that we always
 // get serialization/deserialization right.
 func TestIndividualMessages(t *testing.T) {
-	toTest := []int16{12, 16, 38, 44} // types to test
+	toTest := []int16{12, 16, 36, 38, 44, 54} // types to test
 	for _, messageType := range toTest {
 		fileName, _ := filepath.Abs("../../../test/test_data/" + strconv.Itoa(int(messageType)) + ".raw")
 		b, err := ioutil.ReadFile(fileName)
 		if err != nil {
 			t.Errorf("Could not read message dump for type %d.", messageType)
 		}
-		_, err = NewFromBytes(b, "8.8.8.8:9444")
+		_, err = ReadNew(bytes.NewReader(b), "8.8.8.8:9444")
 		if err != nil {
 			t.Errorf("Could not deserialize message type %d: %s.", messageType, err.Error())
 		}

@@ -7,7 +7,7 @@ package node
 import (
 	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
-	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
+	"io"
 	"time"
 )
 
@@ -43,9 +43,9 @@ func NewNode(id, ip []byte, portTcp, portUdp int32) *Node {
 }
 
 // Convenience to create a new node from bytes
-func NewNodeFromBytes(bytes []byte) (*Node, error) {
+func ReadNewNode(r io.Reader) (*Node, error) {
 	newNode := new(Node)
-	err := newNode.FromBytes(bytes)
+	err := newNode.Read(r)
 	if err != nil {
 		return nil, err
 	} else {
@@ -74,22 +74,28 @@ func (n *Node) ToBytes() []byte {
 }
 
 // Serializable Interface: Construct node info from bytes.
-func (n *Node) FromBytes(bytes []byte) error {
-	if len(bytes) != n.GetSerializedLength() {
-		return errors.New("cannot deserialize node info: incorrect amount of data")
+func (n *Node) Read(r io.Reader) error {
+	var err error
+	n.Identifier, err = message_fields.ReadNodeId(r)
+	if err != nil {
+		return err
 	}
-	position := 0
-	n.Identifier = utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
-	position += message_fields.SizeNodeIdentifier
 	if message_fields.AllZeroes(n.Identifier) {
 		return errors.New("cannot deserialize node info: source ID is all zeroes")
 	}
-	n.IpAddress = bytes[position : position+message_fields.SizeIPAddress]
-	position += message_fields.SizeIPAddress
-	n.PortTcp = message_fields.DeserializeInt32(bytes[position : position+message_fields.SizePort])
-	position += message_fields.SizePort
+	n.IpAddress, err = message_fields.ReadBytes(r, message_fields.SizeIPAddress)
+	if err != nil {
+		return err
+	}
+	n.PortTcp, err = message_fields.ReadInt32(r)
+	if err != nil {
+		return err
+	}
 	n.PortUdp = -1
-	n.QueueTimestamp = message_fields.DeserializeInt64(bytes[position : position+message_fields.SizeTimestamp])
+	n.QueueTimestamp, err = message_fields.ReadInt64(r)
+	if err != nil {
+		return err
+	}
 	n.IdentifierChangeTimestamp = time.Now().UnixNano() / 1000000
 	n.InactiveTimestamp = -1
 	n.FailedConnectionCount = 0

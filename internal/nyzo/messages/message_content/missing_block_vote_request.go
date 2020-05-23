@@ -1,8 +1,8 @@
 package message_content
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"io"
 )
 
 type MissingBlockVoteRequest struct {
@@ -26,10 +26,8 @@ func (c *MissingBlockVoteRequest) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (c *MissingBlockVoteRequest) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) < c.GetSerializedLength() {
-		return 0, errors.New("invalid missing block vote request content")
-	}
-	c.Height = message_fields.DeserializeInt64(bytes[0 : 0+message_fields.SizeBlockHeight])
-	return message_fields.SizeBlockHeight, nil
+func (c *MissingBlockVoteRequest) Read(r io.Reader) error {
+	var err error
+	c.Height, err = message_fields.ReadInt64(r)
+	return err
 }

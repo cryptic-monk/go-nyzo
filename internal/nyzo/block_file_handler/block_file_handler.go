@@ -208,7 +208,13 @@ func (s *state) blockFromIndividualFile(height int64) *blockchain_data.Block {
 		return nil
 	}
 	defer f.Close()
-	block, err := blockchain_data.NewBlockFromIndividualFile(f)
+	// skip block count
+	err = message_fields.Skip(f, 2)
+	if err != nil {
+		logging.ErrorLog.Print(err)
+		return nil
+	}
+	block, err := blockchain_data.ReadNewBlock(f)
 	if err != nil {
 		logging.ErrorLog.Print(err)
 	}
@@ -222,25 +228,31 @@ func (s *state) blockFromConsolidatedFile(height, minHeight, maxHeight int64) *b
 		// fail silently if the file does not exist, as this is a normal situation
 		return nil
 	}
-	raw, err := ioutil.ReadFile(fileName)
+	f, err := os.Open(fileName)
 	if err != nil {
 		logging.ErrorLog.Printf("Unable to load blocks from consolidated file %s: %s.", fileName, err.Error())
 		return nil
 	}
+	defer f.Close()
 	var returnBlock *blockchain_data.Block
-	position := 0
-	blockCount := message_fields.DeserializeInt16(raw[position : position+2])
-	position += 2
+	blockCount, err := message_fields.ReadInt16(f)
+	if err != nil {
+		logging.ErrorLog.Print(err)
+		return nil
+	}
 	var previousBlock *blockchain_data.Block
 	for i := 0; i < int(blockCount) && (previousBlock == nil || previousBlock.Height < maxHeight); i++ {
-		block, bytesConsumed := blockchain_data.NewBlockFromBytes(raw[position:])
-		position += bytesConsumed
-		if block == nil {
+		block, err := blockchain_data.ReadNewBlock(f)
+		if err != nil {
+			logging.ErrorLog.Print(err)
 			return nil
 		}
 		if previousBlock == nil || previousBlock.Height != block.Height-1 {
-			_, bytesConsumed := blockchain_data.NewBalanceListFromBytes(raw[position:])
-			position += bytesConsumed
+			_, err := blockchain_data.ReadNewBalanceList(f)
+			if err != nil {
+				logging.ErrorLog.Print(err)
+				return nil
+			}
 		}
 		s.blockCacheLock.Lock()
 		s.blockCache[block.Height] = block
@@ -308,17 +320,27 @@ func (s *state) balanceListFromIndividualFile(blockHeight int64) *blockchain_dat
 		// fail silently if the file does not exist, as this is a normal situation
 		return nil
 	}
-	raw, err := ioutil.ReadFile(fileName)
+	f, err := os.Open(fileName)
 	if err != nil {
 		logging.ErrorLog.Printf("Unable to load block from file: %s.", err.Error())
 		return nil
 	}
-	block, consumed := blockchain_data.NewBlockFromBytes(raw[2:])
-	if block == nil {
-		logging.ErrorLog.Printf("Unable to load block from file.")
+	defer f.Close()
+	err = message_fields.Skip(f, 2)
+	if err != nil {
+		logging.ErrorLog.Print(err)
 		return nil
 	}
-	balanceList, _ := blockchain_data.NewBalanceListFromBytes(raw[2+consumed:])
+	_, err = blockchain_data.ReadNewBlock(f)
+	if err != nil {
+		logging.ErrorLog.Print(err)
+		return nil
+	}
+	balanceList, err := blockchain_data.ReadNewBalanceList(f)
+	if err != nil {
+		logging.ErrorLog.Print(err)
+		return nil
+	}
 	return balanceList
 }
 
@@ -329,26 +351,29 @@ func (s *state) balanceListFromConsolidatedFile(height int64) *blockchain_data.B
 		// fail silently if the file does not exist, as this is a normal situation
 		return nil
 	}
-	raw, err := ioutil.ReadFile(fileName)
+	f, err := os.Open(fileName)
 	if err != nil {
 		logging.ErrorLog.Printf("Unable to read from consolidated file %s: %s.", fileName, err.Error())
 		return nil
 	}
+	defer f.Close()
 	var returnList *blockchain_data.BalanceList
-	position := 0
-	blockCount := message_fields.DeserializeInt16(raw[position : position+2])
-	position += 2
+	blockCount, err := message_fields.ReadInt16(f)
+	if err != nil {
+		logging.ErrorLog.Print(err)
+		return nil
+	}
 	var previousBlock *blockchain_data.Block
 	for i := 0; i < int(blockCount) && (previousBlock == nil || previousBlock.Height < height); i++ {
-		block, bytesConsumed := blockchain_data.NewBlockFromBytes(raw[position:])
-		position += bytesConsumed
-		if block == nil {
+		block, err := blockchain_data.ReadNewBlock(f)
+		if err != nil {
+			logging.ErrorLog.Print(err)
 			return nil
 		}
 		if previousBlock == nil || previousBlock.Height != block.Height-1 {
-			returnList, bytesConsumed = blockchain_data.NewBalanceListFromBytes(raw[position:])
-			position += bytesConsumed
-			if returnList == nil {
+			returnList, err = blockchain_data.ReadNewBalanceList(f)
+			if err != nil {
+				logging.ErrorLog.Print(err)
 				return nil
 			}
 		} else {

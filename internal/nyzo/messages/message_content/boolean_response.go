@@ -1,8 +1,8 @@
 package message_content
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"io"
 	"math"
 )
 
@@ -29,15 +29,15 @@ func (c *BooleanResponse) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (c *BooleanResponse) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) < message_fields.SizeBool+message_fields.SizeStringLength {
-		return 0, errors.New("invalid boolean response content")
+func (c *BooleanResponse) Read(r io.Reader) error {
+	var err error
+	c.Success, err = message_fields.ReadBool(r)
+	if err != nil {
+		return err
 	}
-	position := 0
-	c.Success = message_fields.DeserializeBool(bytes[position : position+message_fields.SizeBool])
-	position += message_fields.SizeBool
-	var consumed int
-	c.Message, consumed = message_fields.DeserializeString(bytes[position:])
-	position += consumed
-	return consumed, nil
+	c.Message, err = message_fields.ReadString(r)
+	if err != nil {
+		return err
+	}
+	return nil
 }

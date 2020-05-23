@@ -36,7 +36,7 @@ func UpdateBalanceListForNextBlock(ctxt *interfaces.Context, previousVerifier []
 		// all other blocks: copy the balance list before updating it
 		b := balanceList.ToBytes()
 		newBalanceList := &blockchain_data.BalanceList{}
-		_, _ = newBalanceList.FromBytes(b)
+		_ = newBalanceList.Read(bytes.NewReader(b))
 		balanceList = newBalanceList
 		// make sure we have these ready in case the blockchain version goes above 1 below
 		if balanceList.PendingCycleTransactions == nil {

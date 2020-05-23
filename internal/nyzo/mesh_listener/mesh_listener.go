@@ -4,6 +4,7 @@ Simple networking component that listens to the Nyzo mesh.
 package mesh_listener
 
 import (
+	"bytes"
 	"encoding/binary"
 	"github.com/cryptic-monk/go-nyzo/internal/logging"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
@@ -93,7 +94,7 @@ func (s *state) handleTcpConnection(conn net.Conn) {
 	}
 	//TODO: testing only, comment out for production
 	test.Dump_eet(messageBytes)
-	message, err := messages.NewFromBytes(messageBytes, conn.RemoteAddr().String())
+	message, err := messages.ReadNew(bytes.NewReader(messageBytes), conn.RemoteAddr().String())
 	if err != nil {
 		//TODO: report infraction to node manager
 		return
@@ -159,7 +160,7 @@ func (s *state) handleUdpConnection(conn net.PacketConn) {
 			test.Dump_eet(messageBytes)
 			// we got a complete message
 			if s.ctxt.NodeManager.AcceptingMessagesFrom(newAddr.String()) && s.ctxt.NodeManager.AcceptingMessageTypeFrom(newAddr.String(), messageType) {
-				message, err := messages.NewFromBytes(messageBytes, newAddr.String())
+				message, err := messages.ReadNew(bytes.NewReader(messageBytes), newAddr.String())
 				if err == nil {
 					message.ReplyChannel = make(chan *messages.Message)
 					// route the message to whomever wants it

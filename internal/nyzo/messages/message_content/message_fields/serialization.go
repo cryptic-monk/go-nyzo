@@ -5,8 +5,8 @@ package message_fields
 
 import (
 	"encoding/binary"
+	"io"
 	"net"
-	"os"
 )
 
 func SerializeInt16(number int16) []byte {
@@ -19,9 +19,9 @@ func DeserializeInt16(bytes []byte) int16 {
 	return int16(binary.BigEndian.Uint16(bytes))
 }
 
-func Int16FromFile(f *os.File) (int16, error) {
+func ReadInt16(r io.Reader) (int16, error) {
 	b := make([]byte, 2)
-	_, err := f.Read(b)
+	_, err := r.Read(b)
 	if err != nil {
 		return 0, err
 	}
@@ -38,9 +38,9 @@ func DeserializeInt32(bytes []byte) int32 {
 	return int32(binary.BigEndian.Uint32(bytes))
 }
 
-func Int32FromFile(f *os.File) (int32, error) {
+func ReadInt32(r io.Reader) (int32, error) {
 	b := make([]byte, 4)
-	_, err := f.Read(b)
+	_, err := r.Read(b)
 	if err != nil {
 		return 0, err
 	}
@@ -57,9 +57,9 @@ func DeserializeInt64(bytes []byte) int64 {
 	return int64(binary.BigEndian.Uint64(bytes))
 }
 
-func Int64FromFile(f *os.File) (int64, error) {
+func ReadInt64(r io.Reader) (int64, error) {
 	b := make([]byte, 8)
-	_, err := f.Read(b)
+	_, err := r.Read(b)
 	if err != nil {
 		return 0, err
 	}
@@ -78,9 +78,9 @@ func DeserializeBool(bytes []byte) bool {
 	return bytes[0] == 1
 }
 
-func BoolFromFile(f *os.File) (bool, error) {
+func ReadBool(r io.Reader) (bool, error) {
 	b := make([]byte, 1)
-	_, err := f.Read(b)
+	_, err := r.Read(b)
 	if err != nil {
 		return false, err
 	}
@@ -129,6 +129,22 @@ func DeserializeString(bytes []byte) (string, int) {
 	return string(bytes[2 : length+2]), length + 2
 }
 
+func ReadString(r io.Reader) (string, error) {
+	l, err := ReadInt16(r)
+	if err != nil {
+		return "", err
+	}
+	length := int64(l)
+	if length == 0 {
+		return "", nil
+	}
+	bytes, err := ReadBytes(r, length)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), nil
+}
+
 func IP4BytesToString(bytes []byte) string {
 	if len(bytes) < 4 {
 		return "0.0.0.0"
@@ -153,26 +169,37 @@ func AllZeroes(b []byte) bool {
 	return true
 }
 
-func NodeIdFromFile(f *os.File) ([]byte, error) {
+func ReadNodeId(r io.Reader) ([]byte, error) {
 	b := make([]byte, SizeNodeIdentifier)
-	_, err := f.Read(b)
+	_, err := r.Read(b)
 	return b, err
 }
 
-func HashFromFile(f *os.File) ([]byte, error) {
+func ReadHash(r io.Reader) ([]byte, error) {
 	b := make([]byte, SizeHash)
-	_, err := f.Read(b)
+	_, err := r.Read(b)
 	return b, err
 }
 
-func SignatureFromFile(f *os.File) ([]byte, error) {
+func ReadSignature(r io.Reader) ([]byte, error) {
 	b := make([]byte, SizeSignature)
-	_, err := f.Read(b)
+	_, err := r.Read(b)
 	return b, err
 }
 
-func ByteFromFile(f *os.File) (byte, error) {
+func ReadByte(r io.Reader) (byte, error) {
 	b := make([]byte, 1)
-	_, err := f.Read(b)
+	_, err := r.Read(b)
 	return b[0], err
+}
+
+func ReadBytes(r io.Reader, length int64) ([]byte, error) {
+	b := make([]byte, length)
+	_, err := r.Read(b)
+	return b, err
+}
+
+func Skip(r io.ReadSeeker, length int64) error {
+	_, err := r.Seek(length, 1)
+	return err
 }

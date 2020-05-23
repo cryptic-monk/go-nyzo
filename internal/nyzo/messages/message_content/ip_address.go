@@ -1,8 +1,8 @@
 package message_content
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"io"
 )
 
 type IpAddress struct {
@@ -24,10 +24,8 @@ func (c *IpAddress) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (c *IpAddress) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) != message_fields.SizeIPAddress {
-		return 0, errors.New("invalid ip address message content")
-	}
-	c.Address = bytes
-	return message_fields.SizeIPAddress, nil
+func (c *IpAddress) Read(r io.Reader) error {
+	var err error
+	c.Address, err = message_fields.ReadBytes(r, message_fields.SizeIPAddress)
+	return err
 }

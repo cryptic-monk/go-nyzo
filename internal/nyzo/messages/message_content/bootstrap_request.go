@@ -1,8 +1,8 @@
 package message_content
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"io"
 )
 
 type BootstrapRequest struct {
@@ -26,10 +26,8 @@ func (c *BootstrapRequest) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (c *BootstrapRequest) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) < c.GetSerializedLength() {
-		return 0, errors.New("invalid bootstrap request content")
-	}
-	c.Port = message_fields.DeserializeInt32(bytes[0 : 0+message_fields.SizePort])
-	return message_fields.SizePort, nil
+func (c *BootstrapRequest) Read(r io.Reader) error {
+	var err error
+	c.Port, err = message_fields.ReadInt32(r)
+	return err
 }

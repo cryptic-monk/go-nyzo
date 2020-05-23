@@ -4,8 +4,8 @@ TODO: the Java version sends V1 join messages during the startup process, but V2
 package message_content
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"io"
 )
 
 type NodeJoinLegacy struct {
@@ -31,15 +31,12 @@ func (c *NodeJoinLegacy) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (c *NodeJoinLegacy) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) < message_fields.SizePort+message_fields.SizeStringLength {
-		return 0, errors.New("invalid node join legacy content")
+func (c *NodeJoinLegacy) Read(r io.Reader) error {
+	var err error
+	c.Port, err = message_fields.ReadInt32(r)
+	if err != nil {
+		return err
 	}
-	position := 0
-	c.Port = message_fields.DeserializeInt32(bytes[position : position+message_fields.SizePort])
-	position += message_fields.SizePort
-	var consumed int
-	c.Nickname, consumed = message_fields.DeserializeString(bytes[position:])
-	position += consumed
-	return consumed, nil
+	c.Nickname, err = message_fields.ReadString(r)
+	return err
 }

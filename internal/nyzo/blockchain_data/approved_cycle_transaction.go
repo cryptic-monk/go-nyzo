@@ -6,9 +6,8 @@ this, are stored because they are small and helpful for anyone reviewing the bal
 package blockchain_data
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
-	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
+	"io"
 )
 
 type ApprovedCycleTransaction struct {
@@ -19,13 +18,13 @@ type ApprovedCycleTransaction struct {
 }
 
 // Convenience to create an approved cycle transaction from a byte buffer.
-func NewApprovedCycleTransactionFromBytes(bytes []byte) (*ApprovedCycleTransaction, int) {
+func ReadNewApprovedCycleTransaction(r io.Reader) (*ApprovedCycleTransaction, error) {
 	t := &ApprovedCycleTransaction{}
-	consumed, err := t.FromBytes(bytes)
-	if err == nil {
-		return t, consumed
+	err := t.Read(r)
+	if err != nil {
+		return nil, err
 	} else {
-		return nil, consumed
+		return t, nil
 	}
 }
 
@@ -45,18 +44,23 @@ func (t *ApprovedCycleTransaction) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (t *ApprovedCycleTransaction) FromBytes(b []byte) (int, error) {
-	if len(b) < t.GetSerializedLength() {
-		return 0, errors.New("invalid approved cycle transaction data")
+func (t *ApprovedCycleTransaction) Read(r io.Reader) error {
+	var err error
+	t.InitiatorIdentifier, err = message_fields.ReadNodeId(r)
+	if err != nil {
+		return err
 	}
-	position := 0
-	t.InitiatorIdentifier = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
-	position += message_fields.SizeNodeIdentifier
-	t.ReceiverIdentifier = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
-	position += message_fields.SizeNodeIdentifier
-	t.ApprovalHeight = message_fields.DeserializeInt64(b[position : position+message_fields.SizeBlockHeight])
-	position += message_fields.SizeBlockHeight
-	t.Amount = message_fields.DeserializeInt64(b[position : position+message_fields.SizeTransactionAmount])
-	position += message_fields.SizeTransactionAmount
-	return position, nil
+	t.ReceiverIdentifier, err = message_fields.ReadNodeId(r)
+	if err != nil {
+		return err
+	}
+	t.ApprovalHeight, err = message_fields.ReadInt64(r)
+	if err != nil {
+		return err
+	}
+	t.Amount, err = message_fields.ReadInt64(r)
+	if err != nil {
+		return err
+	}
+	return nil
 }

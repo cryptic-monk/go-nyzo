@@ -1,10 +1,9 @@
 package message_content
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/blockchain_data"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
-	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
+	"io"
 )
 
 type BlockWithVotesResponse struct {
@@ -47,49 +46,51 @@ func (r *BlockWithVotesResponse) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (r *BlockWithVotesResponse) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) < message_fields.SizeBool+message_fields.SizeUnnamedInt16 {
-		return 0, errors.New("invalid block votes response content 1")
+func (r *BlockWithVotesResponse) Read(re io.Reader) error {
+	hasBlock, err := message_fields.ReadBool(re)
+	if err != nil {
+		return err
 	}
-	position := 0
-	hasBlock := message_fields.DeserializeBool(bytes[position : position+message_fields.SizeBool])
-	position += message_fields.SizeBool
 	if hasBlock {
-		block, consumed := blockchain_data.NewBlockFromBytes(bytes[position:])
-		if block == nil {
-			return 0, errors.New("invalid block votes response content 2")
+		r.Block, err = blockchain_data.ReadNewBlock(re)
+		if err != nil {
+			return err
 		}
-		r.Block = block
-		position += consumed
 	}
-	if len(bytes)-position < message_fields.SizeUnnamedInt16 {
-		return 0, errors.New("invalid block votes response content 3")
+	voteCount, err := message_fields.ReadInt16(re)
+	if err != nil {
+		return err
 	}
-	voteCount := message_fields.DeserializeInt16(bytes[position : position+message_fields.SizeUnnamedInt16])
-	position += message_fields.SizeUnnamedInt16
 	if r.Block != nil {
 		r.Votes = make([]*blockchain_data.BlockVote, 0, voteCount)
 		for i := 0; i < int(voteCount); i++ {
-			if len(bytes)-position < message_fields.SizeNodeIdentifier+message_fields.SizeTimestamp*2+message_fields.SizeSignature {
-				return 0, errors.New("invalid block votes response content 4")
+			identifier, err := message_fields.ReadNodeId(re)
+			if err != nil {
+				return err
 			}
-			identifier := utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
-			position += message_fields.SizeNodeIdentifier
-			timestamp := message_fields.DeserializeInt64(bytes[position : position+message_fields.SizeTimestamp])
-			position += message_fields.SizeTimestamp
-			messageTimestamp := message_fields.DeserializeInt64(bytes[position : position+message_fields.SizeTimestamp])
-			position += message_fields.SizeTimestamp
-			signature := utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
-			position += message_fields.SizeSignature
-			blockVote := blockchain_data.BlockVote{}
-			blockVote.Height = r.Block.Height
-			blockVote.Hash = r.Block.Hash
-			blockVote.Timestamp = timestamp
-			blockVote.SenderIdentifier = identifier
-			blockVote.MessageTimestamp = messageTimestamp
-			blockVote.MessageSignature = signature
+			timestamp, err := message_fields.ReadInt64(re)
+			if err != nil {
+				return err
+			}
+			messageTimestamp, err := message_fields.ReadInt64(re)
+			if err != nil {
+				return err
+			}
+			signature, err := message_fields.ReadSignature(re)
+			if err != nil {
+				return err
+			}
+			blockVote := blockchain_data.BlockVote{
+				Height:           r.Block.Height,
+				Hash:             r.Block.Hash,
+				Timestamp:        timestamp,
+				ReceiptTimestamp: 0,
+				SenderIdentifier: identifier,
+				MessageTimestamp: messageTimestamp,
+				MessageSignature: signature,
+			}
 			r.Votes = append(r.Votes, &blockVote)
 		}
 	}
-	return position, nil
+	return nil
 }

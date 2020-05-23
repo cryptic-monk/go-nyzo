@@ -9,7 +9,6 @@ import (
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
-	"io/ioutil"
 	"os"
 )
 
@@ -56,20 +55,23 @@ func (s *state) cacheSeedTransactions() {
 // Load transactions in the given file into the cache.
 func (s *state) cacheTransactionsFromFile(fileName string) {
 	successful := false
-	raw, err := ioutil.ReadFile(fileName)
+	f, err := os.Open(fileName)
 	if err == nil {
+		defer f.Close()
 		transactionsRead := 0
-		position := 0
-		transactionCount := int(message_fields.DeserializeInt32(raw[position : position+4]))
-		position += 4
-		for i := 0; i < transactionCount; i++ {
-			height := message_fields.DeserializeInt64(raw[position : position+8])
-			position += 8
-			transaction, bytesRead := blockchain_data.NewTransactionFromBytes(raw[position:])
-			if transaction == nil {
+		transactionCount, err := message_fields.ReadInt32(f)
+		if err != nil {
+			transactionCount = 0
+		}
+		for i := 0; i < int(transactionCount); i++ {
+			height, err := message_fields.ReadInt64(f)
+			if err != nil {
 				break
 			}
-			position += bytesRead
+			transaction, err := blockchain_data.ReadNewTransaction(f)
+			if err != nil {
+				break
+			}
 			transaction.PreviousBlockHash = s.ctxt.BlockAuthority.GetGenesisBlockHash()
 			if height > 0 && transaction.SignatureIsValid() {
 				s.seedTransactionCacheLock.Lock()
@@ -81,7 +83,7 @@ func (s *state) cacheTransactionsFromFile(fileName string) {
 				transactionsRead++
 			}
 		}
-		if transactionsRead == transactionCount {
+		if transactionsRead == int(transactionCount) {
 			successful = true
 		}
 	}

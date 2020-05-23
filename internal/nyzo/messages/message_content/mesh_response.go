@@ -1,9 +1,9 @@
 package message_content
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/node"
+	"io"
 )
 
 const (
@@ -37,28 +37,22 @@ func (c *MeshResponse) ToBytes() []byte {
 }
 
 // Serializable interface: read nodes from data bytes.
-func (c *MeshResponse) FromBytes(bytes []byte) (int, error) {
-	if len(bytes) < 4 {
-		return 0, errors.New("invalid mesh response content")
+func (c *MeshResponse) Read(r io.Reader) error {
+	nodeCount, err := message_fields.ReadInt32(r)
+	if err != nil {
+		return err
 	}
-	nodeCount := int(message_fields.DeserializeInt32(bytes[0:4]))
 	if nodeCount > meshResponseMaxNodes {
 		nodeCount = meshResponseMaxNodes
 	}
-	var newNode *node.Node
-	// nil call works here because GetSerializedLength doesn't user the pointer. TODO: this is nasty
-	nodeDataLength := newNode.GetSerializedLength()
 	// hmm, some mesh responses contain two unsigned 'bonus' nodes, or some other data of this size at the end
 	// of the supposed node list, well well, we'll just ignore that data for now
-	consumed := 4
-	for count, position := 0, 4; position <= len(bytes)+nodeDataLength && count < nodeCount; position += nodeDataLength {
-		newNode, err := node.NewNodeFromBytes(bytes[position : position+nodeDataLength])
+	for count := 0; count < int(nodeCount); count++ {
+		newNode, err := node.ReadNewNode(r)
 		if err != nil {
-			return 0, err
+			return err
 		}
 		c.Nodes = append(c.Nodes, newNode)
-		consumed += nodeDataLength
-		count++
 	}
-	return consumed, nil
+	return nil
 }

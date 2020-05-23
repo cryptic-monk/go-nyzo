@@ -10,6 +10,7 @@ import (
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 	"github.com/cryptic-monk/go-nyzo/pkg/identity"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -23,9 +24,9 @@ const (
 
 // Any object that can be serialized to and from a byte stream
 type Serializable interface {
-	GetSerializedLength() int            // how many bytes will ToBytes return?
-	ToBytes() []byte                     // convert to bytes, will return GetSerializedLength() of zeroes at worst
-	FromBytes(bytes []byte) (int, error) // convert from bytes, returns consumed bytes and an error if the input data is erroneous
+	GetSerializedLength() int // how many bytes will ToBytes return?
+	ToBytes() []byte          // convert to bytes, will return GetSerializedLength() of zeroes at worst
+	Read(r io.Reader) error   // convert from bytes, returns consumed bytes and an error if the input data is erroneous
 }
 
 type Message struct {
@@ -57,16 +58,22 @@ func NewLocal(messageType int16, messageContent Serializable, identity *identity
 //   Content        <variable>
 //   Identifier     32
 //   Signature      64
-func NewFromBytes(bytes []byte, sourceAddress string) (*Message, error) {
+func ReadNew(r io.Reader, sourceAddress string) (*Message, error) {
 	message := Message{}
-	position := 0
 	nonContentLength := message_fields.SizeMessageLength + message_fields.SizeTimestamp + message_fields.SizeMessageType + message_fields.SizeNodeIdentifier + message_fields.SizeSignature
-	contentLength := int(message_fields.DeserializeInt32(bytes[position:position+message_fields.SizeMessageLength])) - nonContentLength
-	position += message_fields.SizeMessageLength
-	message.Timestamp = message_fields.DeserializeInt64(bytes[position : position+message_fields.SizeTimestamp])
-	position += message_fields.SizeTimestamp
-	message.Type = message_fields.DeserializeInt16(bytes[position : position+message_fields.SizeMessageType])
-	position += message_fields.SizeMessageType
+	tl, err := message_fields.ReadInt32(r)
+	if err != nil {
+		return nil, err
+	}
+	contentLength := int(tl) - nonContentLength
+	message.Timestamp, err = message_fields.ReadInt64(r)
+	if err != nil {
+		return nil, err
+	}
+	message.Type, err = message_fields.ReadInt16(r)
+	if err != nil {
+		return nil, err
+	}
 	if contentLength > 0 {
 		switch message.Type {
 		case TypeBlockRequest:
@@ -98,19 +105,22 @@ func NewFromBytes(bytes []byte, sourceAddress string) (*Message, error) {
 		default:
 			message.Content = &message_content.Default{}
 		}
-		content := bytes[position : position+contentLength]
-		position += contentLength
-		_, err := message.Content.FromBytes(content)
+		err := message.Content.Read(r)
 		if err != nil {
 			return nil, err
 		}
 	}
-	message.SourceId = utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
-	position += message_fields.SizeNodeIdentifier
+	message.SourceId, err = message_fields.ReadNodeId(r)
+	if err != nil {
+		return nil, err
+	}
 	if message_fields.AllZeroes(message.SourceId) {
 		return nil, errors.New("cannot convert incoming message, source ID is all zeroes")
 	}
-	message.Signature = utilities.ByteArrayCopy(bytes[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
+	message.Signature, err = message_fields.ReadSignature(r)
+	if err != nil {
+		return nil, err
+	}
 	// TODO: like the Java version, we re-serialize here to check the signature. This is very costly (but safer).
 	if !ed25519.Verify(message.SourceId, message.SerializeForSigning(), message.Signature) {
 		return nil, errors.New("message signature invalid, source address: " + sourceAddress)

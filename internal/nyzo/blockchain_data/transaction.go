@@ -9,7 +9,7 @@ import (
 	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
-	"os"
+	"io"
 	"sort"
 )
 
@@ -46,13 +46,13 @@ type Transaction struct {
 	CycleTransactionSignature  []byte
 }
 
-func NewTransactionFromBytes(bytes []byte) (*Transaction, int) {
+func ReadNewTransaction(r io.Reader) (*Transaction, error) {
 	t := &Transaction{}
-	consumed, err := t.FromBytes(bytes, false)
-	if err == nil {
-		return t, consumed
+	err := t.Read(r, false)
+	if err != nil {
+		return nil, err
 	} else {
-		return nil, consumed
+		return t, nil
 	}
 }
 
@@ -169,133 +169,25 @@ func (t *Transaction) serialize(forSigning bool) []byte {
 	return serialized
 }
 
-// Serializable interface: convert from bytes. Added a parameter here, let's see whether we really need the serializable interface here or can just go with the direct call.
-func (t *Transaction) FromBytes(b []byte, balanceListCycleTransaction bool) (int, error) {
-	if len(b) < message_fields.SizeTransactionType+message_fields.SizeTimestamp {
-		return 0, errors.New("invalid transaction data 1")
-	}
-	position := 0
-	// All transactions start with type and timestamp
-	t.Type = b[position]
-	position += message_fields.SizeTransactionType
-	t.Timestamp = message_fields.DeserializeInt64(b[position : position+message_fields.SizeTimestamp])
-	position += message_fields.SizeTimestamp
-	t.SignatureState = Undetermined
-	// Only cycle signatures don't have an amount and a recipient for now
-	if t.Type != TransactionTypeCycleSignature {
-		if len(b)-position < message_fields.SizeTransactionAmount+message_fields.SizeNodeIdentifier {
-			return 0, errors.New("invalid transaction data 1.1")
-		}
-		t.Amount = message_fields.DeserializeInt64(b[position : position+message_fields.SizeTransactionAmount])
-		position += message_fields.SizeTransactionAmount
-		t.RecipientId = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
-		position += message_fields.SizeNodeIdentifier
-	}
-	// Coin generation already done here
-	if t.Type == TransactionTypeCoinGeneration {
-		return position, nil
-	}
-	if t.Type == TransactionTypeSeed || t.Type == TransactionTypeStandard || t.Type == TransactionTypeCycle {
-		if len(b)-position < message_fields.SizeBlockHeight+message_fields.SizeNodeIdentifier+message_fields.SizeUnnamedByte {
-			return position, errors.New("invalid transaction data 2")
-		}
-		t.PreviousHashHeight = message_fields.DeserializeInt64(b[position : position+8])
-		position += message_fields.SizeBlockHeight
-		t.PreviousBlockHash = make([]byte, 0, 0)
-		t.SenderId = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
-		position += message_fields.SizeNodeIdentifier
-		senderDataLength := int(b[position])
-		position += message_fields.SizeUnnamedByte
-		if senderDataLength > 32 {
-			senderDataLength = 32
-		}
-		if len(b)-position < senderDataLength {
-			return position, errors.New("invalid transaction data 3")
-		}
-		t.SenderData = b[position : position+senderDataLength]
-		position += senderDataLength
-		if len(b)-position < message_fields.SizeSignature {
-			return position, errors.New("invalid transaction data 4")
-		}
-		t.Signature = utilities.ByteArrayCopy(b[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
-		position += message_fields.SizeSignature
-		if t.Type == TransactionTypeCycle {
-			if len(b)-position < message_fields.SizeUnnamedInt32 {
-				return position, errors.New("invalid transaction data 5")
-			}
-			signatureCount := int(message_fields.DeserializeInt32(b[position : position+message_fields.SizeUnnamedInt32]))
-			position += message_fields.SizeUnnamedInt32
-			if !balanceListCycleTransaction {
-				if len(b)-position < signatureCount*(message_fields.SizeNodeIdentifier+message_fields.SizeSignature) {
-					return position, errors.New("invalid transaction data 6")
-				}
-				t.CycleSignatures = make([]*CycleSignature, 0, signatureCount)
-				for i := 0; i < signatureCount; i++ {
-					identifier := utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
-					position += message_fields.SizeNodeIdentifier
-					signature := utilities.ByteArrayCopy(b[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
-					position += message_fields.SizeSignature
-					if !bytes.Equal(identifier, t.SenderId) {
-						t.CycleSignatures = append(t.CycleSignatures, &CycleSignature{identifier, signature})
-					}
-				}
-			} else {
-				t.CycleSignatureTransactions = make([]*Transaction, 0, signatureCount)
-				for i := 0; i < signatureCount; i++ {
-					if len(b)-position < message_fields.SizeTimestamp+message_fields.SizeNodeIdentifier+message_fields.SizeBool+message_fields.SizeSignature {
-						return position, errors.New("invalid cycleSignatureTransaction data 6.1")
-					}
-					cycleSignatureTransaction := &Transaction{}
-					cycleSignatureTransaction.Type = TransactionTypeCycleSignature
-					cycleSignatureTransaction.Timestamp = message_fields.DeserializeInt64(b[position : position+message_fields.SizeTimestamp])
-					position += message_fields.SizeTimestamp
-					cycleSignatureTransaction.SenderId = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
-					position += message_fields.SizeNodeIdentifier
-					cycleSignatureTransaction.CycleTransactionVote = message_fields.DeserializeBool(b[position : position+message_fields.SizeBool])
-					position += message_fields.SizeBool
-					cycleSignatureTransaction.Signature = utilities.ByteArrayCopy(b[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
-					position += message_fields.SizeSignature
-					t.CycleSignatureTransactions = append(t.CycleSignatureTransactions, cycleSignatureTransaction)
-				}
-			}
-		}
-	} else if t.Type == TransactionTypeCycleSignature {
-		if len(b)-position < message_fields.SizeNodeIdentifier+message_fields.SizeBool+(message_fields.SizeSignature*2) {
-			return position, errors.New("invalid transaction data 7")
-		}
-		t.SenderId = utilities.ByteArrayCopy(b[position:position+message_fields.SizeNodeIdentifier], message_fields.SizeNodeIdentifier)
-		position += message_fields.SizeNodeIdentifier
-		t.CycleTransactionVote = message_fields.DeserializeBool(b[position : position+message_fields.SizeBool])
-		position += message_fields.SizeBool
-		t.CycleTransactionSignature = utilities.ByteArrayCopy(b[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
-		position += message_fields.SizeSignature
-		t.Signature = utilities.ByteArrayCopy(b[position:position+message_fields.SizeSignature], message_fields.SizeSignature)
-		position += message_fields.SizeSignature
-	} else {
-		return position, errors.New("invalid transaction data 8, unknown transaction type")
-	}
-	return position, nil
-}
-
-// Serializable interface: read from a file (more memory efficient than reading the whole file first).
-func (t *Transaction) FromFile(f *os.File, balanceListCycleTransaction bool) error {
+// Serializable interface: read from reader.
+func (t *Transaction) Read(r io.Reader, balanceListCycleTransaction bool) error {
 	var err error
-	t.Type, err = message_fields.ByteFromFile(f)
+	t.Type, err = message_fields.ReadByte(r)
 	if err != nil {
 		return err
 	}
-	t.Timestamp, err = message_fields.Int64FromFile(f)
+	t.Timestamp, err = message_fields.ReadInt64(r)
 	if err != nil {
 		return err
 	}
 	t.SignatureState = Undetermined
 	// Only cycle signatures don't have an amount and a recipient for now
 	if t.Type != TransactionTypeCycleSignature {
-		t.Amount, err = message_fields.Int64FromFile(f)
+		t.Amount, err = message_fields.ReadInt64(r)
 		if err != nil {
 			return err
 		}
-		t.RecipientId, err = message_fields.NodeIdFromFile(f)
+		t.RecipientId, err = message_fields.ReadNodeId(r)
 		if err != nil {
 			return err
 		}
@@ -305,16 +197,16 @@ func (t *Transaction) FromFile(f *os.File, balanceListCycleTransaction bool) err
 		return nil
 	}
 	if t.Type == TransactionTypeSeed || t.Type == TransactionTypeStandard || t.Type == TransactionTypeCycle {
-		t.PreviousHashHeight, err = message_fields.Int64FromFile(f)
+		t.PreviousHashHeight, err = message_fields.ReadInt64(r)
 		if err != nil {
 			return err
 		}
 		t.PreviousBlockHash = make([]byte, 0, 0)
-		t.SenderId, err = message_fields.NodeIdFromFile(f)
+		t.SenderId, err = message_fields.ReadNodeId(r)
 		if err != nil {
 			return err
 		}
-		ub, err := message_fields.ByteFromFile(f)
+		ub, err := message_fields.ReadByte(r)
 		if err != nil {
 			return err
 		}
@@ -322,18 +214,16 @@ func (t *Transaction) FromFile(f *os.File, balanceListCycleTransaction bool) err
 		if senderDataLength > 32 {
 			senderDataLength = 32
 		}
-		b := make([]byte, senderDataLength)
-		_, err = f.Read(b)
+		t.SenderData, err = message_fields.ReadBytes(r, int64(senderDataLength))
 		if err != nil {
 			return err
 		}
-		t.SenderData = b
-		t.Signature, err = message_fields.SignatureFromFile(f)
+		t.Signature, err = message_fields.ReadSignature(r)
 		if err != nil {
 			return err
 		}
 		if t.Type == TransactionTypeCycle {
-			ui, err := message_fields.Int32FromFile(f)
+			ui, err := message_fields.ReadInt32(r)
 			if err != nil {
 				return err
 			}
@@ -341,11 +231,11 @@ func (t *Transaction) FromFile(f *os.File, balanceListCycleTransaction bool) err
 			if !balanceListCycleTransaction {
 				t.CycleSignatures = make([]*CycleSignature, 0, signatureCount)
 				for i := 0; i < signatureCount; i++ {
-					identifier, err := message_fields.NodeIdFromFile(f)
+					identifier, err := message_fields.ReadNodeId(r)
 					if err != nil {
 						return err
 					}
-					signature, err := message_fields.SignatureFromFile(f)
+					signature, err := message_fields.ReadSignature(r)
 					if err != nil {
 						return err
 					}
@@ -358,19 +248,19 @@ func (t *Transaction) FromFile(f *os.File, balanceListCycleTransaction bool) err
 				for i := 0; i < signatureCount; i++ {
 					cycleSignatureTransaction := &Transaction{}
 					cycleSignatureTransaction.Type = TransactionTypeCycleSignature
-					cycleSignatureTransaction.Timestamp, err = message_fields.Int64FromFile(f)
+					cycleSignatureTransaction.Timestamp, err = message_fields.ReadInt64(r)
 					if err != nil {
 						return err
 					}
-					cycleSignatureTransaction.SenderId, err = message_fields.NodeIdFromFile(f)
+					cycleSignatureTransaction.SenderId, err = message_fields.ReadNodeId(r)
 					if err != nil {
 						return err
 					}
-					cycleSignatureTransaction.CycleTransactionVote, err = message_fields.BoolFromFile(f)
+					cycleSignatureTransaction.CycleTransactionVote, err = message_fields.ReadBool(r)
 					if err != nil {
 						return err
 					}
-					cycleSignatureTransaction.Signature, err = message_fields.SignatureFromFile(f)
+					cycleSignatureTransaction.Signature, err = message_fields.ReadSignature(r)
 					if err != nil {
 						return err
 					}
@@ -379,24 +269,24 @@ func (t *Transaction) FromFile(f *os.File, balanceListCycleTransaction bool) err
 			}
 		}
 	} else if t.Type == TransactionTypeCycleSignature {
-		t.SenderId, err = message_fields.NodeIdFromFile(f)
+		t.SenderId, err = message_fields.ReadNodeId(r)
 		if err != nil {
 			return err
 		}
-		t.CycleTransactionVote, err = message_fields.BoolFromFile(f)
+		t.CycleTransactionVote, err = message_fields.ReadBool(r)
 		if err != nil {
 			return err
 		}
-		t.CycleTransactionSignature, err = message_fields.SignatureFromFile(f)
+		t.CycleTransactionSignature, err = message_fields.ReadSignature(r)
 		if err != nil {
 			return err
 		}
-		t.Signature, err = message_fields.SignatureFromFile(f)
+		t.Signature, err = message_fields.ReadSignature(r)
 		if err != nil {
 			return err
 		}
 	} else {
-		return errors.New("invalid transaction data 8, unknown transaction type")
+		return errors.New("invalid transaction data, unknown transaction type")
 	}
 	return nil
 }

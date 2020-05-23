@@ -1,6 +1,7 @@
 package networking
 
 import (
+	"bytes"
 	"encoding/binary"
 	"github.com/cryptic-monk/go-nyzo/internal/logging"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages"
@@ -94,7 +95,7 @@ func fetchHandleConnection(m *messages.Message, conn net.Conn, hostName string) 
 	}
 	//TODO: testing only, comment out for production
 	test.Dump_eet(answer)
-	message, err := messages.NewFromBytes(answer, conn.RemoteAddr().String())
+	message, err := messages.ReadNew(bytes.NewReader(answer), conn.RemoteAddr().String())
 	if err != nil {
 		//TODO: report infraction to node manager (maybe also for some of the above)
 		logging.TraceLog.Printf("Could not interpret message fetched from %s, %s.", hostName, err.Error())

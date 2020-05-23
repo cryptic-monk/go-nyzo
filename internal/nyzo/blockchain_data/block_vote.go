@@ -4,9 +4,8 @@ A block vote.
 package blockchain_data
 
 import (
-	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
-	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
+	"io"
 )
 
 type BlockVote struct {
@@ -34,16 +33,19 @@ func (b *BlockVote) ToBytes() []byte {
 }
 
 // Serializable interface: convert from bytes.
-func (b *BlockVote) FromBytes(data []byte) (int, error) {
-	if len(data) < b.GetSerializedLength() {
-		return 0, errors.New("invalid block vote data")
+func (b *BlockVote) Read(r io.Reader) error {
+	var err error
+	b.Height, err = message_fields.ReadInt64(r)
+	if err != nil {
+		return err
 	}
-	position := 0
-	b.Height = message_fields.DeserializeInt64(data[position : position+message_fields.SizeBlockHeight])
-	position += message_fields.SizeBlockHeight
-	b.Hash = utilities.ByteArrayCopy(data[position:position+message_fields.SizeHash], position+message_fields.SizeHash)
-	position += message_fields.SizeHash
-	b.Timestamp = message_fields.DeserializeInt64(data[position : position+message_fields.SizeTimestamp])
-	position += message_fields.SizeTimestamp
-	return position, nil
+	b.Hash, err = message_fields.ReadHash(r)
+	if err != nil {
+		return err
+	}
+	b.Timestamp, err = message_fields.ReadInt64(r)
+	if err != nil {
+		return err
+	}
+	return nil
 }
