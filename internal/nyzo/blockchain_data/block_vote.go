@@ -44,8 +44,5 @@ func (b *BlockVote) Read(r io.Reader) error {
 		return err
 	}
 	b.Timestamp, err = message_fields.ReadInt64(r)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }

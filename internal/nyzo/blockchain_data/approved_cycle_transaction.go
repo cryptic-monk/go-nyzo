@@ -59,8 +59,5 @@ func (t *ApprovedCycleTransaction) Read(r io.Reader) error {
 		return err
 	}
 	t.Amount, err = message_fields.ReadInt64(r)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }

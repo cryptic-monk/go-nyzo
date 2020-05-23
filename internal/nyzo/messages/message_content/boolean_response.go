@@ -36,8 +36,5 @@ func (c *BooleanResponse) Read(r io.Reader) error {
 		return err
 	}
 	c.Message, err = message_fields.ReadString(r)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }

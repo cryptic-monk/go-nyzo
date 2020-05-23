@@ -24,7 +24,7 @@ func TestSigning(t *testing.T) {
 // Read dumped messages, check their signatures and occasionally content just to make sure that we always
 // get serialization/deserialization right.
 func TestIndividualMessages(t *testing.T) {
-	toTest := []int16{12, 16, 36, 38, 44, 54} // types to test
+	toTest := []int16{12, 16, 36, 38, 44, 54, 425} // types to test
 	for _, messageType := range toTest {
 		fileName, _ := filepath.Abs("../../../test/test_data/" + strconv.Itoa(int(messageType)) + ".raw")
 		b, err := ioutil.ReadFile(fileName)

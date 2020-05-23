@@ -22,11 +22,11 @@ const (
 	WriteTimeout      = time.Second * 5
 )
 
-// Any object that can be serialized to and from a byte stream
+// Serialization to and from bytes
 type Serializable interface {
 	GetSerializedLength() int // how many bytes will ToBytes return?
-	ToBytes() []byte          // convert to bytes, will return GetSerializedLength() of zeroes at worst
-	Read(r io.Reader) error   // convert from bytes, returns consumed bytes and an error if the input data is erroneous
+	ToBytes() []byte          // convert to bytes
+	Read(r io.Reader) error   // read from bytes
 }
 
 type Message struct {
@@ -60,12 +60,11 @@ func NewLocal(messageType int16, messageContent Serializable, identity *identity
 //   Signature      64
 func ReadNew(r io.Reader, sourceAddress string) (*Message, error) {
 	message := Message{}
-	nonContentLength := message_fields.SizeMessageLength + message_fields.SizeTimestamp + message_fields.SizeMessageType + message_fields.SizeNodeIdentifier + message_fields.SizeSignature
-	tl, err := message_fields.ReadInt32(r)
+	contentLength, err := message_fields.ReadInt32(r)
 	if err != nil {
 		return nil, err
 	}
-	contentLength := int(tl) - nonContentLength
+	contentLength = contentLength - (message_fields.SizeMessageLength + message_fields.SizeTimestamp + message_fields.SizeMessageType + message_fields.SizeNodeIdentifier + message_fields.SizeSignature)
 	message.Timestamp, err = message_fields.ReadInt64(r)
 	if err != nil {
 		return nil, err

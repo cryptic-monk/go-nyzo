@@ -41,8 +41,5 @@ func (c *BlockRequest) Read(r io.Reader) error {
 		return err
 	}
 	c.IncludeBalanceList, err = message_fields.ReadBool(r)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
