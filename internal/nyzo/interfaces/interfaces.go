@@ -16,7 +16,7 @@ type Component interface {
 	Start()
 }
 
-type BlockFileHandlerInterface interface {
+type BlockHandlerInterface interface {
 	Component
 	// Get a block.
 	GetBlock(height int64) *blockchain_data.Block

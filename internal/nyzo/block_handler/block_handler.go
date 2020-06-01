@@ -1,15 +1,16 @@
 /*
-The block file handler does menial tasks in relation to the block storage file system.
+The block handler does menial tasks in relation to block preparation and storage.
 
-It can retrieve blocks (with some caching) and store them, from individual block files, consolidated block files,
-or from an online source provided by Nyzo.
+It manages unfrozen blocks and it can retrieve frozen blocks from the file system (with some caching) - or store them
+there - in individual block files, consolidated block files, or by obtaining archived block files from an online source
+provided by Nyzo.
 
-Nyzo stores a balance list with each block. Since this is handled here, balance list updates and checking,
-as well as emission of all blockchain-related events to the DB storage in archive mode are handled by the block file handler.
+Nyzo stores a balance list with each block. Balance list updates and checking, as well as emission of all
+blockchain-related events to the DB storage in archive mode are initiated by the block handler.
 
-Implements the "BlockFileHandler" interface defined in nyzo/interfaces.
+Implements the "BlockHandler" interface defined in nyzo/interfaces.
 */
-package block_file_handler
+package block_handler
 
 import (
 	"bytes"
@@ -142,7 +143,7 @@ func (s *state) CommitFrozenEdgeBlock(block *blockchain_data.Block, balanceList 
 	}
 }
 
-// Inform the block file handler that the chain is fully initialized. Changes some minor behavior aspects.
+// Inform the block handler that the chain is fully initialized. Changes some minor behavior aspects.
 func (s *state) SetChainIsInitialized() {
 	s.chainInitialized = true
 }
@@ -611,8 +612,8 @@ func (s *state) Initialize() error {
 	return nil
 }
 
-// Create a block file handler.
-func NewBlockFileHandler(ctxt *interfaces.Context) interfaces.BlockFileHandlerInterface {
+// Create a block handler.
+func NewBlockHandler(ctxt *interfaces.Context) interfaces.BlockHandlerInterface {
 	s := &state{}
 	s.ctxt = ctxt
 	s.blockCache = make(map[int64]*blockchain_data.Block)

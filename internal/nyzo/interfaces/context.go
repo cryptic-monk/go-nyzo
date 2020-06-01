@@ -21,7 +21,7 @@ type Context struct {
 	Identity           *identity.Identity
 	PersistentData     KeyValueStoreInterface
 	Preferences        KeyValueStoreInterface
-	BlockFileHandler   BlockFileHandlerInterface
+	BlockHandler       BlockHandlerInterface
 	CycleAuthority     CycleAuthorityInterface
 	BlockAuthority     BlockAuthorityInterface
 	TransactionManager TransactionManagerInterface

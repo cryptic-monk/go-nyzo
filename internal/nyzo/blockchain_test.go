@@ -59,7 +59,7 @@ func TestVerifyBlocks(t *testing.T) {
 	var previousBlock *blockchain_data.Block
 	var balanceList *blockchain_data.BalanceList
 	startTime := time.Now().UnixNano() / 1000000
-	blocks, _ := ctxt.BlockFileHandler.GetBlocks(0, 9999)
+	blocks, _ := ctxt.BlockHandler.GetBlocks(0, 9999)
 	for _, block := range blocks {
 		// verification of the block and any transactions it contains
 		if !ctxt.BlockAuthority.BlockIsValid(block) {
@@ -89,7 +89,7 @@ func TestVerifyBlocks(t *testing.T) {
 
 // Test balance list normalization.
 func TestNormalizeBalanceList(t *testing.T) {
-	balanceList := ctxt.BlockFileHandler.GetBalanceList(5451011)
+	balanceList := ctxt.BlockHandler.GetBalanceList(5451011)
 	fmt.Println(len(balanceList.Items))
 	if len(balanceList.Items) != 3508 {
 		t.Error("Balance list has unexpected length.")
@@ -125,9 +125,9 @@ func TestNormalizeBalanceList(t *testing.T) {
 
 // Test balance list calculation.
 func TestBalanceAuthority(t *testing.T) {
-	previousBlock := ctxt.BlockFileHandler.GetBlock(5451010)
-	previousBalanceList := ctxt.BlockFileHandler.GetBalanceList(5451010)
-	block := ctxt.BlockFileHandler.GetBlock(5451011)
+	previousBlock := ctxt.BlockHandler.GetBlock(5451010)
+	previousBalanceList := ctxt.BlockHandler.GetBalanceList(5451010)
+	block := ctxt.BlockHandler.GetBlock(5451011)
 	balanceList := balance_authority.UpdateBalanceListForNextBlock(ctxt, previousBlock.VerifierIdentifier, previousBalanceList, block, false)
 	if !bytes.Equal(block.BalanceListHash, balanceList.GetHash()) {
 		t.Error("Updated balance list hash does not match.")
@@ -136,8 +136,8 @@ func TestBalanceAuthority(t *testing.T) {
 
 // Test getting a random balance list from a file.
 func TestBalanceListLoading(t *testing.T) {
-	balanceList := ctxt.BlockFileHandler.GetBalanceList(13219)
-	block := ctxt.BlockFileHandler.GetBlock(13219)
+	balanceList := ctxt.BlockHandler.GetBalanceList(13219)
+	block := ctxt.BlockHandler.GetBlock(13219)
 	if !bytes.Equal(balanceList.GetHash(), block.BalanceListHash) {
 		t.Error("Derived balance list hash does not match.")
 	}
@@ -152,10 +152,10 @@ func TestBalanceListLoading(t *testing.T) {
 // be exactly 100 micronyzo, the balance list calculation would diverge from Java's. The bug was hard to find because
 // it was rare and we had to find the root block of the issue first.
 func TestSchrodingersCat(t *testing.T) {
-	balanceList := ctxt.BlockFileHandler.GetBalanceList(4640100)
-	previousBlock := ctxt.BlockFileHandler.GetBlock(4640100)
+	balanceList := ctxt.BlockHandler.GetBalanceList(4640100)
+	previousBlock := ctxt.BlockHandler.GetBlock(4640100)
 	// this block triggers the heisennyzo for the first time
-	thisBlock := ctxt.BlockFileHandler.GetBlock(4640101)
+	thisBlock := ctxt.BlockHandler.GetBlock(4640101)
 	balanceList = balance_authority.UpdateBalanceListForNextBlock(ctxt, previousBlock.VerifierIdentifier, balanceList, thisBlock, false)
 	if !bytes.Equal(balanceList.GetHash(), thisBlock.BalanceListHash) {
 		t.Errorf("Derived balance list hash does not match. Want: %s, got: %s", identity.BytesToNyzoHex(thisBlock.BalanceListHash), identity.BytesToNyzoHex(balanceList.GetHash()))
@@ -166,9 +166,9 @@ func TestSchrodingersCat(t *testing.T) {
 func TestV0V1Transition(t *testing.T) {
 	var previousBlock *blockchain_data.Block
 	var balanceList *blockchain_data.BalanceList
-	blocks, _ := ctxt.BlockFileHandler.GetBlocks(4499990, 4500300)
-	balanceList = ctxt.BlockFileHandler.GetBalanceList(4499989)
-	previousBlock = ctxt.BlockFileHandler.GetBlock(4499989)
+	blocks, _ := ctxt.BlockHandler.GetBlocks(4499990, 4500300)
+	balanceList = ctxt.BlockHandler.GetBalanceList(4499989)
+	previousBlock = ctxt.BlockHandler.GetBlock(4499989)
 	for _, block := range blocks {
 		// verification of the block and any transactions it contains
 		if !ctxt.BlockAuthority.BlockIsValid(block) {
@@ -198,9 +198,9 @@ func TestV2BalanceList1(t *testing.T) {
 	// add a mock cycle authority
 	ctxt.CycleAuthority = &MockCycleAuthority{}
 	// test balance list calculation and serialization
-	balanceList := ctxt.BlockFileHandler.GetBalanceList(7034301)
-	previousBlock := ctxt.BlockFileHandler.GetBlock(7034301)
-	thisBlock := ctxt.BlockFileHandler.GetBlock(7034302)
+	balanceList := ctxt.BlockHandler.GetBalanceList(7034301)
+	previousBlock := ctxt.BlockHandler.GetBlock(7034301)
+	thisBlock := ctxt.BlockHandler.GetBlock(7034302)
 	balanceList = balance_authority.UpdateBalanceListForNextBlock(ctxt, previousBlock.VerifierIdentifier, balanceList, thisBlock, false)
 	ctxt.CycleAuthority = realCycleAuthority
 	if !bytes.Equal(balanceList.GetHash(), thisBlock.BalanceListHash) {
@@ -215,9 +215,9 @@ func TestV2BalanceList2(t *testing.T) {
 	// add a mock cycle authority
 	ctxt.CycleAuthority = &MockCycleAuthority{}
 	// test balance list calculation and serialization
-	balanceList := ctxt.BlockFileHandler.GetBalanceList(7034302)
-	previousBlock := ctxt.BlockFileHandler.GetBlock(7034302)
-	thisBlock := ctxt.BlockFileHandler.GetBlock(7034303)
+	balanceList := ctxt.BlockHandler.GetBalanceList(7034302)
+	previousBlock := ctxt.BlockHandler.GetBlock(7034302)
+	thisBlock := ctxt.BlockHandler.GetBlock(7034303)
 	balanceList = balance_authority.UpdateBalanceListForNextBlock(ctxt, previousBlock.VerifierIdentifier, balanceList, thisBlock, false)
 	ctxt.CycleAuthority = realCycleAuthority
 	if !bytes.Equal(balanceList.GetHash(), thisBlock.BalanceListHash) {
@@ -227,8 +227,8 @@ func TestV2BalanceList2(t *testing.T) {
 
 // Test loading a block, deriving its balance list, and storing it again.
 func TestStoreBlock(t *testing.T) {
-	block := ctxt.BlockFileHandler.GetBlock(5381633)
-	ctxt.BlockFileHandler.CommitFrozenEdgeBlock(block, nil)
+	block := ctxt.BlockHandler.GetBlock(5381633)
+	ctxt.BlockHandler.CommitFrozenEdgeBlock(block, nil)
 	raw1, _ := ioutil.ReadFile("../../test/test_data/blocks/individual/i_005381633.nyzoblock")
 	raw2, _ := ioutil.ReadFile("../../test/test_data/blocks/individual/i_005381633.nyzoblock_bak")
 	if !bytes.Equal(raw1, raw2) {
@@ -239,7 +239,7 @@ func TestStoreBlock(t *testing.T) {
 // Test calculating cycle information. This will take a while.
 func TestCycleInformation(t *testing.T) {
 	fmt.Println("Calculating cycle information for block 7200000, this will take a while.")
-	block := ctxt.BlockFileHandler.GetBlock(7200000)
+	block := ctxt.BlockHandler.GetBlock(7200000)
 	cycleInformation := ctxt.CycleAuthority.GetCycleInformationForBlock(block)
 	if cycleInformation == nil {
 		t.Error("Could not calculate cycle information for block 7200000.")

@@ -13,7 +13,7 @@ import (
 	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/logging"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/balance_authority"
-	"github.com/cryptic-monk/go-nyzo/internal/nyzo/block_file_handler"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/block_handler"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/blockchain_data"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/interfaces"
@@ -110,7 +110,7 @@ func (s *state) freezeBlock(block *blockchain_data.Block, balanceList *blockchai
 		logging.ErrorLog.Printf("Attempt to freeze discontinuous block that is not a bootstrap block at height %d.", block.Height)
 	} else {
 		// commit the block
-		s.ctxt.BlockFileHandler.CommitFrozenEdgeBlock(block, balanceList)
+		s.ctxt.BlockHandler.CommitFrozenEdgeBlock(block, balanceList)
 		// set the frozen edge
 		s.frozenEdgeHeight = block.Height
 		s.frozenEdgeBlock = block
@@ -139,7 +139,7 @@ func (s *state) addPreviousBlockHashesToTransactions(block *blockchain_data.Bloc
 func (s *state) previousBlockHashForTransaction(hashHeight, transactionHeight int64, previousHashInChain []byte) []byte {
 	// TODO: handle unfrozen state
 	if hashHeight <= s.frozenEdgeHeight || !s.chainInitialized {
-		block := s.ctxt.BlockFileHandler.GetBlock(hashHeight)
+		block := s.ctxt.BlockHandler.GetBlock(hashHeight)
 		if block != nil {
 			return block.Hash
 		} else {
@@ -155,7 +155,7 @@ func (s *state) previousBlockHashForTransaction(hashHeight, transactionHeight in
 func (s *state) loadGenesisBlock() error {
 	// We should be peachy here as we ship the genesis block with the config component and place it correctly during EnsureSetup.
 	// Java tries to load the block from a trusted source, which is not a good idea IMO.
-	genesisBlock := s.ctxt.BlockFileHandler.GetBlock(0)
+	genesisBlock := s.ctxt.BlockHandler.GetBlock(0)
 	if genesisBlock != nil {
 		s.genesisHash = genesisBlock.Hash
 		s.freezeBlock(genesisBlock, nil)
@@ -184,7 +184,7 @@ func (s *state) sendBootstrapBlockRequest() {
 }
 
 func (s *state) setChainIsInitialized() {
-	s.ctxt.BlockFileHandler.SetChainIsInitialized()
+	s.ctxt.BlockHandler.SetChainIsInitialized()
 	s.chainInitialized = true
 	message := messages.NewInternalMessage(messages.TypeInternalChainInitialized)
 	router.Router.RouteInternal(message)
@@ -324,11 +324,11 @@ func (s *state) processBlockResponse(message *messages.Message) {
 func (s *state) freezeHistoricalChainAt(height int64) {
 	if height == 0 {
 		// emit genesis block transactions
-		block := s.ctxt.BlockFileHandler.GetBlock(0)
+		block := s.ctxt.BlockHandler.GetBlock(0)
 		_ = balance_authority.UpdateBalanceListForNextBlock(s.ctxt, nil, nil, block, true)
 	}
-	block := s.ctxt.BlockFileHandler.GetBlock(height)
-	balanceList := s.ctxt.BlockFileHandler.GetBalanceList(height)
+	block := s.ctxt.BlockHandler.GetBlock(height)
+	balanceList := s.ctxt.BlockHandler.GetBalanceList(height)
 	if block != nil && balanceList != nil {
 		logging.InfoLog.Print("Freezing historical chain in archive mode, this could take a while...")
 		s.freezeBlock(block, balanceList)
@@ -366,7 +366,7 @@ func (s *state) loadHistoricalChain(dataStoreHeight int64) {
 			}
 			// try to extend historical frozen edge from online repo
 			offset := (dataStoreHeight + 1) - (dataStoreHeight+1)%1000
-			blocks, err := s.ctxt.BlockFileHandler.GetBlocks(offset, offset+999)
+			blocks, err := s.ctxt.BlockHandler.GetBlocks(offset, offset+999)
 			if len(blocks) == 1000 {
 				// reset backoff now that we got another wad of blocks
 				retryDelay = 1
@@ -405,11 +405,11 @@ func (s *state) loadHistoricalChain(dataStoreHeight int64) {
 
 // Initialize chain from disk if useful. Otherwise send a bootstrap block request.
 func (s *state) initializeChainAt(height int64) {
-	diskHeight := block_file_handler.FindHighestIndividualBlockFile()
+	diskHeight := block_handler.FindHighestIndividualBlockFile()
 	if diskHeight > 0 && diskHeight >= height-int64(s.ctxt.CycleAuthority.GetCurrentCycleLength())*4 {
 		logging.InfoLog.Print("Attempting to restart chain from disk, this could take a while...")
-		block := s.ctxt.BlockFileHandler.GetBlock(diskHeight)
-		balanceList := s.ctxt.BlockFileHandler.GetBalanceList(diskHeight)
+		block := s.ctxt.BlockHandler.GetBlock(diskHeight)
+		balanceList := s.ctxt.BlockHandler.GetBalanceList(diskHeight)
 		if block != nil && balanceList != nil && s.ctxt.CycleAuthority.HasCycleAt(block) {
 			s.freezeBlock(block, balanceList)
 			s.setChainIsInitialized()

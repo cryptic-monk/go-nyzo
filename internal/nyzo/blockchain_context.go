@@ -34,7 +34,7 @@ package nyzo
 import (
 	"github.com/cryptic-monk/go-nyzo/internal/logging"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/block_authority"
-	"github.com/cryptic-monk/go-nyzo/internal/nyzo/block_file_handler"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/block_handler"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/cycle_authority"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/interfaces"
@@ -53,7 +53,7 @@ func NewDefaultContext() *interfaces.Context {
 	ctxt := interfaces.Context{}
 	ctxt.PersistentData = key_value_store.NewKeyValueStore(configuration.DataDirectory+"/"+configuration.PersistentDataFileName, ctxt.WaitGroup)
 	ctxt.Preferences = key_value_store.NewKeyValueStore(configuration.DataDirectory+"/"+configuration.PreferencesFileName, ctxt.WaitGroup)
-	ctxt.BlockFileHandler = block_file_handler.NewBlockFileHandler(&ctxt)
+	ctxt.BlockHandler = block_handler.NewBlockHandler(&ctxt)
 	ctxt.CycleAuthority = cycle_authority.NewCycleAuthority(&ctxt)
 	ctxt.BlockAuthority = block_authority.NewBlockAuthority(&ctxt)
 	ctxt.TransactionManager = transaction_manager.NewTransactionManager(&ctxt)
@@ -78,8 +78,8 @@ func ContextInitialize(ctxt *interfaces.Context) {
 	if err != nil {
 		logging.ErrorLog.Fatal(err.Error())
 	}
-	if ctxt.BlockFileHandler != nil {
-		err = ctxt.BlockFileHandler.Initialize()
+	if ctxt.BlockHandler != nil {
+		err = ctxt.BlockHandler.Initialize()
 		if err != nil {
 			logging.ErrorLog.Fatal(err.Error())
 		}
@@ -123,9 +123,9 @@ func ContextInitialize(ctxt *interfaces.Context) {
 }
 
 func ContextStart(ctxt *interfaces.Context) {
-	if ctxt.BlockFileHandler != nil {
+	if ctxt.BlockHandler != nil {
 		ctxt.WaitGroup.Add(1)
-		go ctxt.BlockFileHandler.Start()
+		go ctxt.BlockHandler.Start()
 	}
 	if ctxt.CycleAuthority != nil {
 		ctxt.WaitGroup.Add(1)

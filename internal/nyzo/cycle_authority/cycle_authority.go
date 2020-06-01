@@ -119,7 +119,7 @@ func (s *state) GetCycleInformationForBlock(block *blockchain_data.Block) *block
 				cycleStartHeight = currentBlock.Height - int64(length)
 			}
 			// step back one block
-			currentBlock = s.ctxt.BlockFileHandler.GetBlock(currentBlock.Height - 1)
+			currentBlock = s.ctxt.BlockHandler.GetBlock(currentBlock.Height - 1)
 		} else {
 			currentBlock = nil
 		}
@@ -161,7 +161,7 @@ func (s *state) DetermineContinuityForBlock(block *blockchain_data.Block) int {
 			sufficientInformation = true
 		} else {
 			startCheckHeight := block.Height - int64(cycleInformation.CycleLengths[0]) - int64(cycleInformation.CycleLengths[1]) - 1
-			b := s.ctxt.BlockFileHandler.GetBlock(block.Height - 1)
+			b := s.ctxt.BlockHandler.GetBlock(block.Height - 1)
 			sufficientInformation = b != nil
 			rule1Pass = true
 			for b != nil && b.Height >= startCheckHeight && rule1Pass && sufficientInformation {
@@ -170,7 +170,7 @@ func (s *state) DetermineContinuityForBlock(block *blockchain_data.Block) int {
 				} else if b.CycleInformation.NewVerifier {
 					rule1Pass = false
 				}
-				b = s.ctxt.BlockFileHandler.GetBlock(b.Height - 1)
+				b = s.ctxt.BlockHandler.GetBlock(b.Height - 1)
 				if b.Height > startCheckHeight && b == nil {
 					sufficientInformation = false
 				}
@@ -244,7 +244,7 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 			if i == startBlock.Height {
 				fillupBlock = startBlock
 			} else {
-				fillupBlock = s.ctxt.BlockFileHandler.GetBlock(i)
+				fillupBlock = s.ctxt.BlockHandler.GetBlock(i)
 			}
 			if fillupBlock == nil {
 				// gap in the chain, can't possible find a cycle
@@ -266,7 +266,7 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 	tailHeight := startBlock.Height
 	for !found {
 		if tailHeight >= 0 && tailHeight < s.bufferTailHeight {
-			fillupBlock := s.ctxt.BlockFileHandler.GetBlock(tailHeight)
+			fillupBlock := s.ctxt.BlockHandler.GetBlock(tailHeight)
 			if fillupBlock == nil {
 				// gap in the chain, can't possible find a cycle
 				return false, false, false, nil, 0

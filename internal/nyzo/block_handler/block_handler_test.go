@@ -1,4 +1,4 @@
-package block_file_handler
+package block_handler
 
 import (
 	"crypto/sha256"
@@ -22,7 +22,7 @@ func TestIndividualFileHeight(t *testing.T) {
 }
 
 func TestLoadIndividualBlock(t *testing.T) {
-	block := ctxt.BlockFileHandler.GetBlock(5381631)
+	block := ctxt.BlockHandler.GetBlock(5381631)
 	if identity.BytesToNyzoHex(block.Hash) != "b78bed638247dfa8-836c3f7dbb69f71f-4515f3341a800b51-d7f1ed0b6260a350" {
 		t.Error("Block hash does not match.")
 	}
@@ -35,14 +35,14 @@ func TestLoadIndividualBlock(t *testing.T) {
 }
 
 func TestLoadHistoricalBlock(t *testing.T) {
-	block := ctxt.BlockFileHandler.GetBlock(5348050)
+	block := ctxt.BlockHandler.GetBlock(5348050)
 	if identity.BytesToNyzoHex(block.VerifierSignature) != "edfd1fb015d996f9-1f2d52b905bd446a-ca6b818c778f2608-8bffb45362601194-1f39e3e3017d571d-53586799bc9e0b09-93edb58435f13c9c-6477aa1109bd790a" {
 		t.Error("Block signature does not match.")
 	}
 }
 
 func TestLoadIndividualBlocks(t *testing.T) {
-	blocks, _ := ctxt.BlockFileHandler.GetBlocks(5381631, 5381633)
+	blocks, _ := ctxt.BlockHandler.GetBlocks(5381631, 5381633)
 	if identity.BytesToNyzoHex(blocks[2].VerifierSignature) != "ad592cf2f242e83d-04bbe0fcc71bb1a3-9afd01b204d4ddca-f1bbe3dccf56aed9-3fc28d896e3216e6-c2f6bcf129bf0333-e5580e983d0b485f-02aba98dd9c5e20a" {
 		t.Error("Block signature does not match.")
 	}
@@ -50,7 +50,7 @@ func TestLoadIndividualBlocks(t *testing.T) {
 
 func TestLoadHistoricalBlocks(t *testing.T) {
 	// spanning two archive files
-	blocks, _ := ctxt.BlockFileHandler.GetBlocks(5347980, 5348020)
+	blocks, _ := ctxt.BlockHandler.GetBlocks(5347980, 5348020)
 	if identity.BytesToNyzoHex(blocks[29].VerifierSignature) != "a3cd5b9b69b2e47d-2e1998d06b156467-3108b83f2176c619-7b1c3566880775d9-60db36e74c226256-992d55408aba5784-d845fe36555fd9fa-6fe06d95fbf80003" {
 		t.Error("Block signature does not match.")
 	}
@@ -61,7 +61,7 @@ func TestLoadHistoricalOnlineBlocks(t *testing.T) {
 	_ = os.Remove("../../test/test_data/blocks/000/000012.nyzoblock")
 
 	// spanning two archive files
-	blocks, _ := ctxt.BlockFileHandler.GetBlocks(11990, 12010)
+	blocks, _ := ctxt.BlockHandler.GetBlocks(11990, 12010)
 	if identity.BytesToNyzoHex(blocks[15].VerifierSignature) != "d9b9b6ee197d4186-b6f507688f6feb30-079f84794fa2d53e-56c9a59f03b772b9-e32e9ab0731b490c-cabb2774795961ba-cc85db307ad3d56e-50f726be4d84a609" {
 		t.Error("Block signature does not match.")
 	}
@@ -140,5 +140,5 @@ func TestBlockConsolidation(t *testing.T) {
 func init() {
 	ctxt = interfaces.Context{}
 	configuration.DataDirectory = "../../../test/test_data"
-	ctxt.BlockFileHandler = NewBlockFileHandler(&ctxt)
+	ctxt.BlockHandler = NewBlockHandler(&ctxt)
 }

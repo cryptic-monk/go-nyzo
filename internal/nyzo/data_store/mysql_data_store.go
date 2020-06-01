@@ -151,7 +151,7 @@ func (s *mySqlState) Start() {
 	defer logging.InfoLog.Print("Main loop of MySql data store exited gracefully.")
 	defer s.ctxt.WaitGroup.Done()
 	logging.InfoLog.Print("Starting main loop of MySql data store.")
-	// Emit the currently highest height in the DB, the block file handler will pick this up and boostrap from there.
+	// Emit the currently highest height in the DB, the block handler will pick this up and boostrap from there.
 	message := messages.NewInternalMessage(messages.TypeInternalDataStoreHeight, s.dbHeight)
 	router.Router.RouteInternal(message)
 	done := false

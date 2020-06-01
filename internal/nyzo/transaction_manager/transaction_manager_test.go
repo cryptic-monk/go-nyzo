@@ -2,7 +2,7 @@ package transaction_manager
 
 import (
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/block_authority"
-	"github.com/cryptic-monk/go-nyzo/internal/nyzo/block_file_handler"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/block_handler"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/blockchain_data"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/cycle_authority"
@@ -21,7 +21,7 @@ func TestTransactionManager(t *testing.T) {
 	transactionManager.ctxt = &interfaces.Context{}
 	transactionManager.ctxt.BlockAuthority = block_authority.NewBlockAuthority(transactionManager.ctxt)
 	transactionManager.ctxt.PersistentData = key_value_store.NewKeyValueStore(configuration.DataDirectory+"/"+configuration.PersistentDataFileName, transactionManager.ctxt.WaitGroup)
-	transactionManager.ctxt.BlockFileHandler = block_file_handler.NewBlockFileHandler(transactionManager.ctxt)
+	transactionManager.ctxt.BlockHandler = block_handler.NewBlockHandler(transactionManager.ctxt)
 	transactionManager.ctxt.CycleAuthority = cycle_authority.NewCycleAuthority(transactionManager.ctxt)
 	transactionManager.ctxt.Preferences = key_value_store.NewKeyValueStore(configuration.DataDirectory+"/"+configuration.PreferencesFileName, transactionManager.ctxt.WaitGroup)
 	_ = transactionManager.ctxt.BlockAuthority.Initialize()

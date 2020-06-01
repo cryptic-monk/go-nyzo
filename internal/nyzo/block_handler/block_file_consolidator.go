@@ -1,7 +1,7 @@
 /*
-Used by the block file handler to periodically consolidate individual block files into 1000 block file units.
+Used by the block handler to periodically consolidate individual block files into 1000 block file units.
 */
-package block_file_handler
+package block_handler
 
 import (
 	"errors"

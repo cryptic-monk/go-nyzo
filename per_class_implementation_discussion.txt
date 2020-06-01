@@ -13,7 +13,7 @@ Simple data type.
 
 # BlockFileConsolidator.java ✓
 
-This is part of the block file handler in Go, works pretty similarly otherwise.
+This is part of the block handler in Go, works pretty similarly otherwise.
 
 # RunMode.java ✓
 
