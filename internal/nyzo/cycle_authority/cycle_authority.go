@@ -43,6 +43,7 @@ type state struct {
 	winningBootstrapHeight    int64
 	winningBootstrapCycle     [][]byte
 	chainInitialized          bool
+	frozenEdgeHeight          int64
 	cycleBufferLock           sync.Mutex
 	bufferTailHeight          int64
 	bufferHeadHeight          int64
@@ -59,6 +60,16 @@ func (s *state) GetCurrentCycleLength() int {
 func (s *state) VerifierInCurrentCycle(id []byte) bool {
 	reply := router.GetInternalReply(localMessageVerifierInCurrentCycle, id)
 	return reply.Payload[0].(bool)
+}
+
+// TODO: Implement this.
+func (s *state) GetTopNewVerifier() []byte {
+	return make([]byte, 32, 32)
+}
+
+// TODO: Implement this.
+func (s *state) ShouldPenalizeVerifier(verifier []byte) bool {
+	return false
 }
 
 // Is the given verifier currently in cycle? Can yield false positives during startup.
@@ -119,7 +130,7 @@ func (s *state) GetCycleInformationForBlock(block *blockchain_data.Block) *block
 				cycleStartHeight = currentBlock.Height - int64(length)
 			}
 			// step back one block
-			currentBlock = s.ctxt.BlockHandler.GetBlock(currentBlock.Height - 1)
+			currentBlock = s.ctxt.BlockHandler.GetBlock(currentBlock.Height-1, nil)
 		} else {
 			currentBlock = nil
 		}
@@ -161,7 +172,7 @@ func (s *state) DetermineContinuityForBlock(block *blockchain_data.Block) int {
 			sufficientInformation = true
 		} else {
 			startCheckHeight := block.Height - int64(cycleInformation.CycleLengths[0]) - int64(cycleInformation.CycleLengths[1]) - 1
-			b := s.ctxt.BlockHandler.GetBlock(block.Height - 1)
+			b := s.ctxt.BlockHandler.GetBlock(block.Height-1, block.PreviousBlockHash)
 			sufficientInformation = b != nil
 			rule1Pass = true
 			for b != nil && b.Height >= startCheckHeight && rule1Pass && sufficientInformation {
@@ -170,7 +181,7 @@ func (s *state) DetermineContinuityForBlock(block *blockchain_data.Block) int {
 				} else if b.CycleInformation.NewVerifier {
 					rule1Pass = false
 				}
-				b = s.ctxt.BlockHandler.GetBlock(b.Height - 1)
+				b = s.ctxt.BlockHandler.GetBlock(b.Height-1, b.PreviousBlockHash)
 				if b.Height > startCheckHeight && b == nil {
 					sufficientInformation = false
 				}
@@ -226,63 +237,83 @@ func prependBytes(x [][]byte, y []byte) [][]byte {
 func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis, newVerifier bool, cycle [][]byte, length int) {
 	s.cycleBufferLock.Lock()
 	defer s.cycleBufferLock.Unlock()
+
+	// Above the frozen edge, different chain variants (and therefore cycle variants) can exist, so if we are working
+	// there, we abandon the variant part of the cycle buffer. This can and must include a block that has been
+	// frozen just now.
+	if startBlock.Height > s.frozenEdgeHeight && s.bufferHeadHeight > s.frozenEdgeHeight && s.chainInitialized {
+		unfrozen := int(s.bufferHeadHeight - s.frozenEdgeHeight)
+		if unfrozen >= len(s.cycleBuffer) {
+			// abandon completely, clearly not useful
+			s.cycleBuffer = make([][]byte, 0, 0)
+			s.bufferHeadHeight = -1
+		} else {
+			// abandon unfrozen part
+			s.cycleBuffer = s.cycleBuffer[0 : len(s.cycleBuffer)-unfrozen]
+			s.bufferHeadHeight = s.frozenEdgeHeight
+		}
+	}
+
+	// abandon a buffer that is probably not useful, should be rare
+	// this would lead to a substantially higher load if consensus should stall for more than 2000 blocks
+	if startBlock.Height < s.bufferTailHeight || startBlock.Height > s.bufferHeadHeight+2000 {
+		s.cycleBuffer = make([][]byte, 0, 0)
+		s.bufferHeadHeight = -1
+	}
+
+	// return from cache if we can
 	if startBlock.CycleInfoCache != nil && startBlock.CycleInfoCache.CycleTailHeight >= s.bufferTailHeight && startBlock.CycleInfoCache.CycleHeadHeight <= s.bufferHeadHeight {
 		cycle = s.cycleBuffer[startBlock.CycleInfoCache.CycleTailHeight-s.bufferTailHeight : int64(len(s.cycleBuffer))-(s.bufferHeadHeight-startBlock.CycleInfoCache.CycleHeadHeight)]
 		return startBlock.CycleInfoCache.Found, startBlock.CycleInfoCache.IsGenesis, startBlock.CycleInfoCache.NewVerifier, cycle, len(cycle)
 	}
 
-	if startBlock.Height < s.bufferTailHeight || startBlock.Height > s.bufferHeadHeight+100 {
-		// abandon a buffer that is probably not useful, should be rare
-		s.cycleBuffer = make([][]byte, 0, 0)
-		s.bufferHeadHeight = -1
-	}
-
-	if s.bufferHeadHeight >= 0 {
-		// if we have a valid buffer, fill it up to the current head
-		for i := s.bufferHeadHeight + 1; i <= startBlock.Height; i++ {
-			var fillupBlock *blockchain_data.Block
-			if i == startBlock.Height {
-				fillupBlock = startBlock
-			} else {
-				fillupBlock = s.ctxt.BlockHandler.GetBlock(i)
-			}
-			if fillupBlock == nil {
-				// gap in the chain, can't possible find a cycle
-				return false, false, false, nil, 0
-			}
-			s.cycleBuffer = append(s.cycleBuffer, fillupBlock.VerifierIdentifier)
-			s.bufferHeadHeight++
+	// Fill an existing buffer backwards, starting from the given block, to account for a possibly unfrozen part.
+	if s.bufferHeadHeight >= 0 && startBlock.Height > s.bufferHeadHeight {
+		tempBuffer := make([][]byte, 0, 0)
+		currentBlock := startBlock
+		for currentBlock != nil && currentBlock.Height > s.bufferHeadHeight {
+			tempBuffer = prependBytes(tempBuffer, currentBlock.VerifierIdentifier)
+			currentBlock = s.ctxt.BlockHandler.GetBlock(currentBlock.Height-1, currentBlock.PreviousBlockHash)
+		}
+		if currentBlock != nil && currentBlock.Height == s.bufferHeadHeight {
+			s.cycleBuffer = append(s.cycleBuffer, tempBuffer...)
+			s.bufferHeadHeight = startBlock.Height
+		} else {
+			// gap in the chain, can't possible find a cycle
+			return false, false, false, nil, 0
 		}
 	}
 
+	// if we don't have a valid buffer, start one
 	if s.bufferHeadHeight == -1 {
-		// if we don't have a valid buffer, start one
 		s.cycleBuffer = append(s.cycleBuffer, startBlock.VerifierIdentifier)
 		s.bufferHeadHeight = startBlock.Height
 		s.bufferTailHeight = startBlock.Height
 	}
 
+	// here's where we actually start looking for a cycle, stepping backwards in the buffer
+	// the backwards expansion of the buffer
 	headHeight := startBlock.Height
 	tailHeight := startBlock.Height
 	for !found {
-		if tailHeight >= 0 && tailHeight < s.bufferTailHeight {
-			fillupBlock := s.ctxt.BlockHandler.GetBlock(tailHeight)
-			if fillupBlock == nil {
+		if tailHeight < s.bufferTailHeight {
+			tailBlock := s.ctxt.BlockHandler.GetBlock(tailHeight, nil)
+			if tailBlock == nil {
 				// gap in the chain, can't possible find a cycle
 				return false, false, false, nil, 0
 			}
-			s.cycleBuffer = prependBytes(s.cycleBuffer, fillupBlock.VerifierIdentifier)
-			s.bufferTailHeight = tailHeight
+			s.cycleBuffer = prependBytes(s.cycleBuffer, tailBlock.VerifierIdentifier)
+			s.bufferTailHeight = tailBlock.Height
 		}
 		if headHeight != tailHeight {
 			cycle = s.cycleBuffer[tailHeight-s.bufferTailHeight+1 : int64(len(s.cycleBuffer))-(s.bufferHeadHeight-headHeight)]
 			if utilities.ByteArrayContains(cycle, s.cycleBuffer[tailHeight-s.bufferTailHeight]) {
 				found = true
 				newVerifier = !bytes.Equal(startBlock.VerifierIdentifier, s.cycleBuffer[tailHeight-s.bufferTailHeight])
-				tailHeight++
 			}
 		}
 		if tailHeight == 0 {
+			cycle = s.cycleBuffer[tailHeight-s.bufferTailHeight : int64(len(s.cycleBuffer))-(s.bufferHeadHeight-headHeight)]
 			newVerifier = true
 			isGenesis = true
 			found = true
@@ -292,13 +323,12 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 		}
 	}
 	if found {
-		cycle = s.cycleBuffer[tailHeight-s.bufferTailHeight : int64(len(s.cycleBuffer))-(s.bufferHeadHeight-headHeight)]
 		startBlock.CycleInfoCache = &blockchain_data.BlockCycleInfoCache{
 			Found:           found,
 			IsGenesis:       isGenesis,
 			NewVerifier:     newVerifier,
 			CycleHeadHeight: headHeight,
-			CycleTailHeight: tailHeight,
+			CycleTailHeight: headHeight - int64(len(cycle)) + 1,
 		}
 	}
 	return found, isGenesis, newVerifier, cycle, len(cycle)
@@ -425,6 +455,8 @@ func (s *state) Start() {
 					// regular operation
 					s.updateVerifiersInCurrentCycle(block)
 				}
+				// important that this is set AFTER the above updateVerifiersInCurrentCycle
+				s.frozenEdgeHeight = block.Height
 			case messages.TypeInternalChainInitialized:
 				s.chainInitialized = true
 			case messages.TypeInternalExiting:

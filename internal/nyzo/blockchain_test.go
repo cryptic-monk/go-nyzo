@@ -52,6 +52,14 @@ func (s *MockCycleAuthority) HasCycleAt(block *blockchain_data.Block) bool {
 	return true
 }
 
+func (s *MockCycleAuthority) GetTopNewVerifier() []byte {
+	return make([]byte, 32, 32)
+}
+
+func (s *MockCycleAuthority) ShouldPenalizeVerifier(verifier []byte) bool {
+	return false
+}
+
 /*
 Test verification of the first 10K blocks.
 */
@@ -125,9 +133,9 @@ func TestNormalizeBalanceList(t *testing.T) {
 
 // Test balance list calculation.
 func TestBalanceAuthority(t *testing.T) {
-	previousBlock := ctxt.BlockHandler.GetBlock(5451010)
+	previousBlock := ctxt.BlockHandler.GetBlock(5451010, nil)
 	previousBalanceList := ctxt.BlockHandler.GetBalanceList(5451010)
-	block := ctxt.BlockHandler.GetBlock(5451011)
+	block := ctxt.BlockHandler.GetBlock(5451011, nil)
 	balanceList := balance_authority.UpdateBalanceListForNextBlock(ctxt, previousBlock.VerifierIdentifier, previousBalanceList, block, false)
 	if !bytes.Equal(block.BalanceListHash, balanceList.GetHash()) {
 		t.Error("Updated balance list hash does not match.")
@@ -137,7 +145,7 @@ func TestBalanceAuthority(t *testing.T) {
 // Test getting a random balance list from a file.
 func TestBalanceListLoading(t *testing.T) {
 	balanceList := ctxt.BlockHandler.GetBalanceList(13219)
-	block := ctxt.BlockHandler.GetBlock(13219)
+	block := ctxt.BlockHandler.GetBlock(13219, nil)
 	if !bytes.Equal(balanceList.GetHash(), block.BalanceListHash) {
 		t.Error("Derived balance list hash does not match.")
 	}
@@ -153,9 +161,9 @@ func TestBalanceListLoading(t *testing.T) {
 // it was rare and we had to find the root block of the issue first.
 func TestSchrodingersCat(t *testing.T) {
 	balanceList := ctxt.BlockHandler.GetBalanceList(4640100)
-	previousBlock := ctxt.BlockHandler.GetBlock(4640100)
+	previousBlock := ctxt.BlockHandler.GetBlock(4640100, nil)
 	// this block triggers the heisennyzo for the first time
-	thisBlock := ctxt.BlockHandler.GetBlock(4640101)
+	thisBlock := ctxt.BlockHandler.GetBlock(4640101, nil)
 	balanceList = balance_authority.UpdateBalanceListForNextBlock(ctxt, previousBlock.VerifierIdentifier, balanceList, thisBlock, false)
 	if !bytes.Equal(balanceList.GetHash(), thisBlock.BalanceListHash) {
 		t.Errorf("Derived balance list hash does not match. Want: %s, got: %s", identity.BytesToNyzoHex(thisBlock.BalanceListHash), identity.BytesToNyzoHex(balanceList.GetHash()))
@@ -168,7 +176,7 @@ func TestV0V1Transition(t *testing.T) {
 	var balanceList *blockchain_data.BalanceList
 	blocks, _ := ctxt.BlockHandler.GetBlocks(4499990, 4500300)
 	balanceList = ctxt.BlockHandler.GetBalanceList(4499989)
-	previousBlock = ctxt.BlockHandler.GetBlock(4499989)
+	previousBlock = ctxt.BlockHandler.GetBlock(4499989, nil)
 	for _, block := range blocks {
 		// verification of the block and any transactions it contains
 		if !ctxt.BlockAuthority.BlockIsValid(block) {
@@ -199,8 +207,8 @@ func TestV2BalanceList1(t *testing.T) {
 	ctxt.CycleAuthority = &MockCycleAuthority{}
 	// test balance list calculation and serialization
 	balanceList := ctxt.BlockHandler.GetBalanceList(7034301)
-	previousBlock := ctxt.BlockHandler.GetBlock(7034301)
-	thisBlock := ctxt.BlockHandler.GetBlock(7034302)
+	previousBlock := ctxt.BlockHandler.GetBlock(7034301, nil)
+	thisBlock := ctxt.BlockHandler.GetBlock(7034302, nil)
 	balanceList = balance_authority.UpdateBalanceListForNextBlock(ctxt, previousBlock.VerifierIdentifier, balanceList, thisBlock, false)
 	ctxt.CycleAuthority = realCycleAuthority
 	if !bytes.Equal(balanceList.GetHash(), thisBlock.BalanceListHash) {
@@ -216,8 +224,8 @@ func TestV2BalanceList2(t *testing.T) {
 	ctxt.CycleAuthority = &MockCycleAuthority{}
 	// test balance list calculation and serialization
 	balanceList := ctxt.BlockHandler.GetBalanceList(7034302)
-	previousBlock := ctxt.BlockHandler.GetBlock(7034302)
-	thisBlock := ctxt.BlockHandler.GetBlock(7034303)
+	previousBlock := ctxt.BlockHandler.GetBlock(7034302, nil)
+	thisBlock := ctxt.BlockHandler.GetBlock(7034303, nil)
 	balanceList = balance_authority.UpdateBalanceListForNextBlock(ctxt, previousBlock.VerifierIdentifier, balanceList, thisBlock, false)
 	ctxt.CycleAuthority = realCycleAuthority
 	if !bytes.Equal(balanceList.GetHash(), thisBlock.BalanceListHash) {
@@ -227,7 +235,7 @@ func TestV2BalanceList2(t *testing.T) {
 
 // Test loading a block, deriving its balance list, and storing it again.
 func TestStoreBlock(t *testing.T) {
-	block := ctxt.BlockHandler.GetBlock(5381633)
+	block := ctxt.BlockHandler.GetBlock(5381633, nil)
 	ctxt.BlockHandler.CommitFrozenEdgeBlock(block, nil)
 	raw1, _ := ioutil.ReadFile("../../test/test_data/blocks/individual/i_005381633.nyzoblock")
 	raw2, _ := ioutil.ReadFile("../../test/test_data/blocks/individual/i_005381633.nyzoblock_bak")
@@ -239,7 +247,7 @@ func TestStoreBlock(t *testing.T) {
 // Test calculating cycle information. This will take a while.
 func TestCycleInformation(t *testing.T) {
 	fmt.Println("Calculating cycle information for block 7200000, this will take a while.")
-	block := ctxt.BlockHandler.GetBlock(7200000)
+	block := ctxt.BlockHandler.GetBlock(7200000, nil)
 	cycleInformation := ctxt.CycleAuthority.GetCycleInformationForBlock(block)
 	if cycleInformation == nil {
 		t.Error("Could not calculate cycle information for block 7200000.")

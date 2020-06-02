@@ -58,7 +58,7 @@ type state struct {
 
 // Get an individual block.
 // We just call GetBlocks with from/to as the same height.
-func (s *state) GetBlock(height int64) *blockchain_data.Block {
+func (s *state) GetBlock(height int64, hash []byte) *blockchain_data.Block {
 	result, _ := s.GetBlocks(height, height)
 	if result != nil && len(result) == 1 {
 		return result[0]
@@ -462,7 +462,7 @@ func getIndividualBlockFilesSorted() ([]os.FileInfo, error) {
 func (s *state) storeBlock(block *blockchain_data.Block, balanceList *blockchain_data.BalanceList) {
 	if balanceList == nil {
 		// Bootstrapping or genesis block
-		previousBlock := s.GetBlock(block.Height - 1)
+		previousBlock := s.GetBlock(block.Height-1, nil)
 		if previousBlock == nil && block.Height > 0 {
 			logging.ErrorLog.Fatalf("Cannot store block at height %d: unable to get previous block.", block.Height)
 			return
@@ -559,7 +559,7 @@ func (s *state) emitCycleEvents(block *blockchain_data.Block) {
 		// find all lost verifier IDs
 		for i := lostStartHeight; i >= lostEndHeight; i-- {
 			var lostVerifierBlock *blockchain_data.Block
-			lostVerifierBlock = s.GetBlock(i)
+			lostVerifierBlock = s.GetBlock(i, nil)
 			if lostVerifierBlock != nil {
 				lostVerifiers = append(lostVerifiers, lostVerifierBlock.VerifierIdentifier)
 			}

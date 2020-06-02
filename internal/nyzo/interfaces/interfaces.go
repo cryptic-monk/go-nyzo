@@ -19,7 +19,7 @@ type Component interface {
 type BlockHandlerInterface interface {
 	Component
 	// Get a block.
-	GetBlock(height int64) *blockchain_data.Block
+	GetBlock(height int64, hash []byte) *blockchain_data.Block
 	// Get multiple blocks in continuous order.
 	GetBlocks(heightFrom, heightTo int64) ([]*blockchain_data.Block, error)
 	// Load a balance list for the given height, only works if we have an individual block file for that height (for now).
@@ -34,6 +34,8 @@ type CycleAuthorityInterface interface {
 	Component
 	GetCurrentCycleLength() int                                                                 // returns the current cycle length
 	VerifierInCurrentCycle(id []byte) bool                                                      // returns true if the verifier with this id is currently in the cycle
+	GetTopNewVerifier() []byte                                                                  // get top voted new verifier
+	ShouldPenalizeVerifier(verifier []byte) bool                                                // should this verifier be removed?
 	GetCycleInformationForBlock(block *blockchain_data.Block) *blockchain_data.CycleInformation // get cycle information for this block
 	DetermineContinuityForBlock(block *blockchain_data.Block) int                               // determine this block's continuity (diversity) state
 	HasCycleAt(block *blockchain_data.Block) bool                                               // returns "true" if we know the cycle at the given block

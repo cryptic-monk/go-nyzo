@@ -22,7 +22,7 @@ func TestIndividualFileHeight(t *testing.T) {
 }
 
 func TestLoadIndividualBlock(t *testing.T) {
-	block := ctxt.BlockHandler.GetBlock(5381631)
+	block := ctxt.BlockHandler.GetBlock(5381631, nil)
 	if identity.BytesToNyzoHex(block.Hash) != "b78bed638247dfa8-836c3f7dbb69f71f-4515f3341a800b51-d7f1ed0b6260a350" {
 		t.Error("Block hash does not match.")
 	}
@@ -35,7 +35,7 @@ func TestLoadIndividualBlock(t *testing.T) {
 }
 
 func TestLoadHistoricalBlock(t *testing.T) {
-	block := ctxt.BlockHandler.GetBlock(5348050)
+	block := ctxt.BlockHandler.GetBlock(5348050, nil)
 	if identity.BytesToNyzoHex(block.VerifierSignature) != "edfd1fb015d996f9-1f2d52b905bd446a-ca6b818c778f2608-8bffb45362601194-1f39e3e3017d571d-53586799bc9e0b09-93edb58435f13c9c-6477aa1109bd790a" {
 		t.Error("Block signature does not match.")
 	}
@@ -104,6 +104,12 @@ func (s *mockCycleAuthorityState) Initialize() error {
 }
 func (s *mockCycleAuthorityState) Start() {
 
+}
+func (s *mockCycleAuthorityState) GetTopNewVerifier() []byte {
+	return make([]byte, 32, 32)
+}
+func (s *mockCycleAuthorityState) ShouldPenalizeVerifier(verifier []byte) bool {
+	return false
 }
 
 func TestBlockConsolidation(t *testing.T) {

@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	minimumVerificationInterval = 1500
-	minimumBlockchainVersion    = 0
-	maximumBlockchainVersion    = 2
+	MinimumVerificationInterval = 1500
+	MinimumBlockchainVersion    = 0
+	MaximumBlockchainVersion    = 2
 )
 
 type Block struct {
@@ -92,7 +92,7 @@ func (b *Block) Read(r io.Reader) error {
 		return err
 	}
 	b.BlockchainVersion, b.Height = FromShlong(combined)
-	if b.BlockchainVersion < minimumBlockchainVersion || b.BlockchainVersion > maximumBlockchainVersion {
+	if b.BlockchainVersion < MinimumBlockchainVersion || b.BlockchainVersion > MaximumBlockchainVersion {
 		return errors.New(fmt.Sprintf("block has unknown blockchain version %d", b.BlockchainVersion))
 	}
 	b.PreviousBlockHash, err = message_fields.ReadHash(r)

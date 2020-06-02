@@ -134,19 +134,24 @@ func (s *state) addPreviousBlockHashesToTransactions(block *blockchain_data.Bloc
 }
 
 // This is an interesting case: for signing, transactions include a previous block hash each. This one is hard
-// to determine above the frozen edge, "Block" does this in Java, which kinda makes zero sense as it has to reach
+// to determine above the frozen edge, "Block" does this in Java, which makes little sense as it has to reach
 // all the way up to the block manager. We do it here in the block manager.
 func (s *state) previousBlockHashForTransaction(hashHeight, transactionHeight int64, previousHashInChain []byte) []byte {
-	// TODO: handle unfrozen state
-	if hashHeight <= s.frozenEdgeHeight || !s.chainInitialized {
-		block := s.ctxt.BlockHandler.GetBlock(hashHeight)
-		if block != nil {
-			return block.Hash
-		} else {
-			return make([]byte, 32, 32)
+	// Try to get a frozen block for this hash height.
+	block := s.ctxt.BlockHandler.GetBlock(hashHeight, nil)
+	if block == nil && hashHeight > s.frozenEdgeHeight && s.chainInitialized {
+		// Step back through the unfrozen chain to see if we can find this hash height.
+		previousBlock := s.ctxt.BlockHandler.GetBlock(transactionHeight-1, previousHashInChain)
+		for previousBlock != nil && previousBlock.Height > hashHeight {
+			previousBlock = s.ctxt.BlockHandler.GetBlock(previousBlock.Height-1, previousBlock.PreviousBlockHash)
 		}
+		if previousBlock != nil && previousBlock.Height == hashHeight {
+			block = previousBlock
+		}
+	}
+	if block != nil {
+		return block.Hash
 	} else {
-		// TODO: part above frozen edge is not done yet.
 		return make([]byte, 32, 32)
 	}
 }
@@ -155,7 +160,7 @@ func (s *state) previousBlockHashForTransaction(hashHeight, transactionHeight in
 func (s *state) loadGenesisBlock() error {
 	// We should be peachy here as we ship the genesis block with the config component and place it correctly during EnsureSetup.
 	// Java tries to load the block from a trusted source, which is not a good idea IMO.
-	genesisBlock := s.ctxt.BlockHandler.GetBlock(0)
+	genesisBlock := s.ctxt.BlockHandler.GetBlock(0, nil)
 	if genesisBlock != nil {
 		s.genesisHash = genesisBlock.Hash
 		s.freezeBlock(genesisBlock, nil)
@@ -324,10 +329,10 @@ func (s *state) processBlockResponse(message *messages.Message) {
 func (s *state) freezeHistoricalChainAt(height int64) {
 	if height == 0 {
 		// emit genesis block transactions
-		block := s.ctxt.BlockHandler.GetBlock(0)
+		block := s.ctxt.BlockHandler.GetBlock(0, nil)
 		_ = balance_authority.UpdateBalanceListForNextBlock(s.ctxt, nil, nil, block, true)
 	}
-	block := s.ctxt.BlockHandler.GetBlock(height)
+	block := s.ctxt.BlockHandler.GetBlock(height, nil)
 	balanceList := s.ctxt.BlockHandler.GetBalanceList(height)
 	if block != nil && balanceList != nil {
 		logging.InfoLog.Print("Freezing historical chain in archive mode, this could take a while...")
@@ -408,7 +413,7 @@ func (s *state) initializeChainAt(height int64) {
 	diskHeight := block_handler.FindHighestIndividualBlockFile()
 	if diskHeight > 0 && diskHeight >= height-int64(s.ctxt.CycleAuthority.GetCurrentCycleLength())*4 {
 		logging.InfoLog.Print("Attempting to restart chain from disk, this could take a while...")
-		block := s.ctxt.BlockHandler.GetBlock(diskHeight)
+		block := s.ctxt.BlockHandler.GetBlock(diskHeight, nil)
 		balanceList := s.ctxt.BlockHandler.GetBalanceList(diskHeight)
 		if block != nil && balanceList != nil && s.ctxt.CycleAuthority.HasCycleAt(block) {
 			s.freezeBlock(block, balanceList)

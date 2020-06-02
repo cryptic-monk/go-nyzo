@@ -12,7 +12,7 @@ import (
 var ctxt interfaces.Context
 
 func TestVerifyIndividualBlock(t *testing.T) {
-	block := ctxt.BlockHandler.GetBlock(5451011)
+	block := ctxt.BlockHandler.GetBlock(5451011, nil)
 	if !ctxt.BlockAuthority.BlockIsValid(block) {
 		t.Error("Block could not be verified.")
 	}

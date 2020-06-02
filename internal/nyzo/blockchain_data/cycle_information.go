@@ -18,3 +18,8 @@ func (c CycleInformation) CalculateTrailingEdgeHeight(blockHeight int64) int64 {
 	}
 	return height
 }
+
+// Convenience to get the current cycle length.
+func (c CycleInformation) GetCycleLength() int64 {
+	return int64(c.CycleLengths[0])
+}
