@@ -7,15 +7,10 @@ package blockchain_data
 import (
 	"errors"
 	"fmt"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 	"io"
-)
-
-const (
-	MinimumVerificationInterval = 1500
-	MinimumBlockchainVersion    = 0
-	MaximumBlockchainVersion    = 2
 )
 
 type Block struct {
@@ -92,7 +87,7 @@ func (b *Block) Read(r io.Reader) error {
 		return err
 	}
 	b.BlockchainVersion, b.Height = FromShlong(combined)
-	if b.BlockchainVersion < MinimumBlockchainVersion || b.BlockchainVersion > MaximumBlockchainVersion {
+	if b.BlockchainVersion < configuration.MinimumBlockchainVersion || b.BlockchainVersion > configuration.MaximumBlockchainVersion {
 		return errors.New(fmt.Sprintf("block has unknown blockchain version %d", b.BlockchainVersion))
 	}
 	b.PreviousBlockHash, err = message_fields.ReadHash(r)
@@ -137,4 +132,14 @@ func (b *Block) Read(r io.Reader) error {
 	doubleSha := utilities.DoubleSha256(b.VerifierSignature)
 	b.Hash = doubleSha[:]
 	return nil
+}
+
+// Sum up all standard transactions in this block.
+func (b *Block) StandardTransactionSum() (sum int64) {
+	for _, transaction := range b.Transactions {
+		if transaction.Type == TransactionTypeStandard {
+			sum += transaction.Amount
+		}
+	}
+	return sum
 }

@@ -60,6 +60,11 @@ func (s *MockCycleAuthority) ShouldPenalizeVerifier(verifier []byte) bool {
 	return false
 }
 
+func (s *MockCycleAuthority) GetMaximumTransactionsForBlockAssembly() int {
+	return 10
+}
+
+
 /*
 Test verification of the first 10K blocks.
 */

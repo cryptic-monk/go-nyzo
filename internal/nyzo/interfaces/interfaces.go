@@ -24,6 +24,8 @@ type BlockHandlerInterface interface {
 	GetBlocks(heightFrom, heightTo int64) ([]*blockchain_data.Block, error)
 	// Load a balance list for the given height, only works if we have an individual block file for that height (for now).
 	GetBalanceList(blockHeight int64) *blockchain_data.BalanceList
+	// Get a balance list beyond the frozen edge.
+	GetBalanceListForBlock(block *blockchain_data.Block) *blockchain_data.BalanceList
 	// Commit a new frozen edge block. This is blocking and can take a significant amount of time during startup (especially for the archive node).
 	CommitFrozenEdgeBlock(block *blockchain_data.Block, balanceList *blockchain_data.BalanceList)
 	// Inform the file handler that the chain is fully initialized
@@ -34,6 +36,7 @@ type CycleAuthorityInterface interface {
 	Component
 	GetCurrentCycleLength() int                                                                 // returns the current cycle length
 	VerifierInCurrentCycle(id []byte) bool                                                      // returns true if the verifier with this id is currently in the cycle
+	GetMaximumTransactionsForBlockAssembly() int                                                // transaction rate limiting
 	GetTopNewVerifier() []byte                                                                  // get top voted new verifier
 	ShouldPenalizeVerifier(verifier []byte) bool                                                // should this verifier be removed?
 	GetCycleInformationForBlock(block *blockchain_data.Block) *blockchain_data.CycleInformation // get cycle information for this block

@@ -2,7 +2,10 @@ package block_authority
 
 import (
 	"bytes"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/balance_authority"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/blockchain_data"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/interfaces"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 	"time"
 )
@@ -47,11 +50,11 @@ func (s *state) chainScore(block *blockchain_data.Block, zeroBlockHeight int64) 
 						score += 10000
 					}
 					// Penalize for each balance-list spam transaction.
-					//score += spamTransactionCount(s.ctxt, block) * 5
+					score += int64(spamTransactionCount(s.ctxt, block)) * 5
 					// Penalize a smaller amount for each excess transaction. Excess transactions have no lingering
 					// negative effects, but including them in the scoring does provide an assurance of an upper
 					// limit.
-					//score += excessTransactionCount(s.ctxt, block) / 10
+					score += int64(excessTransactionCount(s.ctxt, block) / 10)
 				}
 			} else {
 				previousBlock := s.ctxt.BlockHandler.GetBlock(block.Height-1, block.PreviousBlockHash)
@@ -65,33 +68,33 @@ func (s *state) chainScore(block *blockchain_data.Block, zeroBlockHeight int64) 
 						score += 5
 					}
 					// Penalize for each balance-list spam transaction.
-					//score += spamTransactionCount(s.ctxt, block) * 5
+					score += int64(spamTransactionCount(s.ctxt, block)) * 5
 					// Penalize a smaller amount for each excess transaction. Excess transactions have no lingering
 					// negative effects, but including them in the scoring does provide an assurance of an upper
 					// limit.
-					//score += excessTransactionCount(s.ctxt, block) / 10
+					score += int64(excessTransactionCount(s.ctxt, block)) / 10
 					// Account for the blockchain version. If this is a version downgrade, a skip in versions, or
 					// higher than the maximum allowed version, the block is invalid.
 					if block.BlockchainVersion < previousBlock.BlockchainVersion ||
 						block.BlockchainVersion > previousBlock.BlockchainVersion+1 ||
-						block.BlockchainVersion > blockchain_data.MaximumBlockchainVersion {
+						block.BlockchainVersion > configuration.MaximumBlockchainVersion {
 						score = MaxChainScore
-					} /* else if isMissedUpgradeOpportunity(block, previousBlock.BlockchainVersion) {
+					} else if configuration.IsMissedUpgradeOpportunity(block.Height, block.BlockchainVersion, previousBlock.BlockchainVersion) {
 						// In this case, an upgrade is allowed but this block is not an upgrade. Apply a 1-point
 						// penalty to this block to encourage an upgrade block from the same verifier to be approved
 						// if available.
 						score += 1
-					} else if isImproperlyTimedUpgrade(block, previousBlock.BlockchainVersion) {
+					} else if configuration.IsImproperlyTimedUpgrade(block.Height, block.BlockchainVersion, previousBlock.BlockchainVersion) {
 						// In this case, the block is an upgrade when we are not looking to upgrade. This is a valid
 						// block, but it is not preferred. Apply a large penalty.
 						score += 10000
-					}*/
+					}
 				}
 			}
 		}
 		// Check the verification timestamp interval.
 		previousBlock := s.ctxt.BlockHandler.GetBlock(block.Height-1, block.PreviousBlockHash)
-		if previousBlock != nil && previousBlock.VerificationTimestamp > block.VerificationTimestamp-blockchain_data.MinimumVerificationInterval {
+		if previousBlock != nil && previousBlock.VerificationTimestamp > block.VerificationTimestamp-configuration.MinimumVerificationInterval {
 			score = MaxChainScore // invalid
 		}
 		// Check that the verification timestamp is not unreasonably far into the future.
@@ -104,4 +107,26 @@ func (s *state) chainScore(block *blockchain_data.Block, zeroBlockHeight int64) 
 		score = MaxChainScore - 1
 	}
 	return score
+}
+
+// Assess the number of spam transactions in the given block.
+func spamTransactionCount(ctxt *interfaces.Context, block *blockchain_data.Block) int {
+	var count int
+	previousBlock := ctxt.BlockHandler.GetBlock(block.Height-1, block.PreviousBlockHash)
+	if previousBlock != nil {
+		balanceList := ctxt.BlockHandler.GetBalanceListForBlock(previousBlock)
+		if balanceList != nil {
+			count = balance_authority.NumberOfTransactionsSpammingBalanceList(balanceList, block.Transactions)
+		}
+	}
+	return count
+}
+
+// Too many transactions in this block?
+func excessTransactionCount(ctxt *interfaces.Context, block *blockchain_data.Block) int {
+	excess := len(block.Transactions) - ctxt.CycleAuthority.GetMaximumTransactionsForBlockAssembly()
+	if excess > 0 {
+		excess = 0
+	}
+	return excess
 }

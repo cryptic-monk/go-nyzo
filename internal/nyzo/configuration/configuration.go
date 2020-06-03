@@ -34,6 +34,15 @@ const (
 	MaximumCycleTransactionAmount = 100000 * MicronyzoMultiplierRatio
 	// Charge an account maintenance fee every ... blocks
 	BlocksBetweenFee = 500
+	// Spam prevention, transactions must not create accounts with less than x micronyzo.
+	MinimumPreferredBalance = 10 * MicronyzoMultiplierRatio
+	// Transaction rate limiting. The baseline transaction rate is 10 transactions per second, which is 70 transactions per block.
+	BaselineTransactionRate      = 10
+	BaselineTransactionsPerBlock = BlockDuration * BaselineTransactionRate / 1000
+
+	MinimumVerificationInterval = 1500
+	MinimumBlockchainVersion    = 0
+	MaximumBlockchainVersion    = 2
 
 	// v2 cycle transaction caps
 	ApprovedCycleTransactionRetentionInterval = 10000
@@ -193,6 +202,35 @@ func loadLockedAccounts() {
 			LockedAccounts[line] = struct{}{}
 		}
 	}
+}
+
+func ActivationHeight(version int16) int64 {
+	activationHeights := []int64{0, 4500000, 7000000}
+	if version < 0 || version >= int16(len(activationHeights)) {
+		return 9223372036854775807
+	} else {
+		return activationHeights[version]
+	}
+}
+
+// This is only used to lightly penalize blocks that are not upgrades when an upgrade is allowed. This gives
+// preference to the upgrade block, if provided.
+func IsMissedUpgradeOpportunity(blockHeight int64, blockVersion int16, previousBlockVersion int16) bool {
+	if blockHeight >= ActivationHeight(blockVersion+1) &&
+		blockVersion == previousBlockVersion &&
+		blockVersion < MaximumBlockchainVersion &&
+		blockHeight%50 == 0 {
+		return true
+	}
+	return false
+}
+
+// This is used to penalize upgrade blocks that are submitted at non-preferred times (too early, or too late).
+func IsImproperlyTimedUpgrade(blockHeight int64, blockVersion int16, previousBlockVersion int16) bool {
+	if blockVersion > previousBlockVersion && (blockHeight < ActivationHeight(blockVersion) || blockHeight%50 == 0) {
+		return true
+	}
+	return false
 }
 
 func init() {

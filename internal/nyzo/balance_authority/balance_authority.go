@@ -432,3 +432,65 @@ func emitTransaction(height int64, canonical int32, timestamp int64, transaction
 	}
 	return canonical
 }
+
+// Does the given id exist in the balance list?
+func hasAccount(balanceList *blockchain_data.BalanceList, id []byte) bool {
+	for _, item := range balanceList.Items {
+		if bytes.Equal(item.Identifier, id) {
+			return true
+		}
+	}
+	return false
+}
+
+// To prevent issues related to an exceptionally large balance list, some limitations are needed to avoid the
+// creation of many small accounts. There are two ways to create many accounts with little funds: directly, by
+// transferring a small amount to a new account, and indirectly, by transferring a larger amount away from an
+// account to create a new account, leaving very little in the source account. Both of these cases are addressed
+// here.
+//
+// balanceList is the balance list form the previous block.
+func transactionSpamsBalanceList(balanceList *blockchain_data.BalanceList, transaction *blockchain_data.Transaction, allTransactionsInBlock []*blockchain_data.Transaction) bool {
+	var isSpam bool
+
+	// Only standard transactions are of concern.
+	if transaction.Type == blockchain_data.TransactionTypeStandard {
+
+		// This is the direct case. A ∩10 transaction will produce a new account of slightly less than ∩10, but this
+		// is not an issue. We are simply trying to make it difficult to spam the balance list. The exact threshold
+		// is less important than having a threshold significantly more than μ1, and a minimum transaction of ∩10
+		// for a new account is less confusing than a minimum of ∩10.025063. A transaction of only μ1 will not spam
+		// the balance list, as the full transaction amount is consumed by the transaction fee, and a new entry is
+		// not created in the balance list.
+		if !hasAccount(balanceList, transaction.RecipientId) && transaction.Amount > 1 && transaction.Amount < configuration.MinimumPreferredBalance {
+			isSpam = true
+		} else {
+			// This is the indirect case. The existing account needs to have at least ∩10 in it or be empty after
+			// the block. All transactions must be considered, or multiple transactions could be sent from a single
+			// account to bypass the rule.
+			senderBalance := getBalance(balanceList, transaction.SenderId)
+			var senderSum int64
+			for _, blockTransaction := range allTransactionsInBlock {
+				if bytes.Equal(blockTransaction.SenderId, transaction.SenderId) {
+					senderSum += blockTransaction.Amount
+				}
+			}
+			if senderBalance-senderSum < configuration.MinimumPreferredBalance && senderBalance-senderSum != 0 {
+				isSpam = true
+			}
+		}
+	}
+
+	return isSpam
+}
+
+// Counts transaction spam in the given block, balanceList is the balance list of the previous block.
+func NumberOfTransactionsSpammingBalanceList(balanceList *blockchain_data.BalanceList, transactions []*blockchain_data.Transaction) int {
+	var count int
+	for _, transaction := range transactions {
+		if transactionSpamsBalanceList(balanceList, transaction, transactions) {
+			count++
+		}
+	}
+	return count
+}

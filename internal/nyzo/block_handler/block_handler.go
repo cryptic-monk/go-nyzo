@@ -57,11 +57,14 @@ type state struct {
 }
 
 // Get an individual block.
-// We just call GetBlocks with from/to as the same height.
+// We first try to get a frozen block. If there's none and we have a hash, we dig into the unfrozen blocks.
 func (s *state) GetBlock(height int64, hash []byte) *blockchain_data.Block {
 	result, _ := s.GetBlocks(height, height)
 	if result != nil && len(result) == 1 {
 		return result[0]
+	}
+	if hash != nil {
+		return s.GetUnfrozenBlock(height, hash)
 	}
 	return nil
 }
@@ -97,6 +100,51 @@ func (s *state) GetBlocks(heightFrom, heightTo int64) ([]*blockchain_data.Block,
 // e.g. we can start from the genesis block, or we get a known balance list for a certain block.
 func (s *state) GetBalanceList(blockHeight int64) *blockchain_data.BalanceList {
 	return s.getBalanceListFromBestSource(blockHeight)
+}
+
+// This is used for getting balance lists beyond the frozen edge, where multiple chain variants can exist.
+func (s *state) GetBalanceListForBlock(block *blockchain_data.Block) *blockchain_data.BalanceList {
+	// Try to get a frozen balance list. This is unlikely to be needed atm, but should make the
+	// overall behavior of the function more logical.
+	balanceList := s.GetBalanceList(block.Height)
+	if balanceList != nil {
+		return balanceList
+	}
+	// Don't try to handle unfrozen blocks if the chain hasn't been initialized, or if we're at or below the frozen edge.
+	if !s.chainInitialized || block.Height <= s.frozenEdgeHeight {
+		return nil
+	}
+	// Now, let's start digging. First, get the balance list and block at the frozen edge. We need those later.
+	balanceList = s.GetBalanceList(s.frozenEdgeHeight)
+	previousBlock := s.GetBlock(s.frozenEdgeHeight, nil)
+	if balanceList == nil || previousBlock == nil {
+		return nil
+	}
+	// Now make a list of blocks beyond the frozen edge, stepping backwards from the given block.
+	blocks := make([]*blockchain_data.Block, 0, 0)
+	currentBlock := block
+	for currentBlock != nil && currentBlock.Height > s.frozenEdgeHeight {
+		blocks = prependBlock(blocks, currentBlock)
+		currentBlock = s.GetBlock(currentBlock.Height-1, currentBlock.PreviousBlockHash)
+	}
+	if currentBlock == nil {
+		// could not find a continuous chain
+		return nil
+	}
+	// Finally, calculate the balance list, iterating through the list of blocks after the frozen edge.
+	for _, currentBlock = range blocks {
+		balanceList = balance_authority.UpdateBalanceListForNextBlock(s.ctxt, previousBlock.VerifierIdentifier, balanceList, currentBlock, false)
+		previousBlock = currentBlock
+	}
+	return balanceList
+}
+
+// Utility to prepend y to x in the most memory efficient way possible.
+func prependBlock(x []*blockchain_data.Block, y *blockchain_data.Block) []*blockchain_data.Block {
+	x = append(x, &blockchain_data.Block{})
+	copy(x[1:], x)
+	x[0] = y
+	return x
 }
 
 // Commit a new frozen edge block. This must be considered blocking for chain advancement and can take a significant amount of time

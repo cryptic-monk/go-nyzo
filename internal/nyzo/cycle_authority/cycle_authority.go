@@ -24,9 +24,10 @@ import (
 )
 
 const (
-	localMessageGetCurrentCycleLength  = -1
-	localMessageVerifierInCurrentCycle = -2
-	localMessageHasCycleAt             = -3
+	localMessageGetCurrentCycleLength               = -1
+	localMessageVerifierInCurrentCycle              = -2
+	localMessageHasCycleAt                          = -3
+	localMessageMaximumTransactionsForBlockAssembly = -4
 )
 
 type state struct {
@@ -48,6 +49,7 @@ type state struct {
 	bufferTailHeight          int64
 	bufferHeadHeight          int64
 	cycleBuffer               [][]byte
+	cycleTransactionSum       int64 // sum of organic transactions in current cycle
 }
 
 // Length of the current cycle. This goes through the loop to make sure we can handle concurrency.
@@ -60,6 +62,12 @@ func (s *state) GetCurrentCycleLength() int {
 func (s *state) VerifierInCurrentCycle(id []byte) bool {
 	reply := router.GetInternalReply(localMessageVerifierInCurrentCycle, id)
 	return reply.Payload[0].(bool)
+}
+
+// Transaction rate limiting. This goes through the loop to make sure we can handle concurrency.
+func (s *state) GetMaximumTransactionsForBlockAssembly() int {
+	reply := router.GetInternalReply(localMessageMaximumTransactionsForBlockAssembly)
+	return reply.Payload[0].(int)
 }
 
 // TODO: Implement this.
@@ -267,7 +275,7 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 		return startBlock.CycleInfoCache.Found, startBlock.CycleInfoCache.IsGenesis, startBlock.CycleInfoCache.NewVerifier, cycle, len(cycle)
 	}
 
-	// Fill an existing buffer backwards, starting from the given block, to account for a possibly unfrozen part.
+	// Fill an existing buffer backwards, starting from the given block, accounts for a possibly unfrozen part.
 	if s.bufferHeadHeight >= 0 && startBlock.Height > s.bufferHeadHeight {
 		tempBuffer := make([][]byte, 0, 0)
 		currentBlock := startBlock
@@ -292,7 +300,7 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 	}
 
 	// here's where we actually start looking for a cycle, stepping backwards in the buffer
-	// the backwards expansion of the buffer
+	// we allow our buffer to be expanded backwards into stored historical blocks
 	headHeight := startBlock.Height
 	tailHeight := startBlock.Height
 	for !found {
@@ -375,6 +383,23 @@ func (s *state) updateVerifiersInCurrentCycle(currentBlock *blockchain_data.Bloc
 	//TODO: Java builds various sets here, probably for performance reasons, doesn't seem to make sense in Go, but we'll have to explore this whole list vs. map situation for the cycle at one time
 }
 
+// Update the cycle transaction sum, used for transaction rate limiting.
+// Java does a lot of caching here, not sure if it's worth it given the current memory structure, so we just
+// KISS for now.
+func (s *state) updateCycleTransactionsSum() {
+	var sum int64
+	currentBlock := s.ctxt.BlockHandler.GetBlock(s.frozenEdgeHeight, nil)
+	if currentBlock == nil || currentBlock.CycleInformation == nil {
+		return
+	}
+	threshold := currentBlock.Height - currentBlock.CycleInformation.GetCycleLength()
+	for currentBlock != nil && currentBlock.Height >= threshold {
+		sum += currentBlock.StandardTransactionSum()
+		currentBlock = s.ctxt.BlockHandler.GetBlock(currentBlock.Height-1, nil)
+	}
+	s.cycleTransactionSum = sum
+}
+
 /// Set cycle info directly: info obtained from a bootstrap response.
 func (s *state) setBootstrapCycle(cycle [][]byte, height int64) {
 	// Add bootstrap cycle to the cycle buffer.
@@ -442,6 +467,12 @@ func (s *state) Start() {
 			case localMessageHasCycleAt:
 				foundCycle, _, _, _, _ := s.findCycleAt(m.Payload[0].(*blockchain_data.Block))
 				m.ReplyChannel <- messages.NewInternalMessage(localMessageHasCycleAt, foundCycle)
+			case localMessageMaximumTransactionsForBlockAssembly:
+				// Above baseline, one transaction is allowed per block for each Nyzo in organic transactions, on average, in the
+				// previous cycle. This ensures that transaction capacity automatically increases to support additional demand on
+				// the system while eliminating the possibility of cheap attacks with many small transactions.
+				additionalTransactions := s.cycleTransactionSum / configuration.MicronyzoMultiplierRatio / int64(len(s.currentCycle))
+				m.ReplyChannel <- messages.NewInternalMessage(localMessageMaximumTransactionsForBlockAssembly, int(configuration.BaselineTransactionsPerBlock+additionalTransactions))
 			case messages.TypeInternalNewFrozenEdgeBlock:
 				block := m.Payload[0].(*blockchain_data.Block)
 				// for s.winningBootstrapHeight, we already know the cycle, for all others...
@@ -457,6 +488,7 @@ func (s *state) Start() {
 				}
 				// important that this is set AFTER the above updateVerifiersInCurrentCycle
 				s.frozenEdgeHeight = block.Height
+				s.updateCycleTransactionsSum()
 			case messages.TypeInternalChainInitialized:
 				s.chainInitialized = true
 			case messages.TypeInternalExiting:
@@ -494,6 +526,7 @@ func (s *state) Initialize() error {
 	router.Router.AddInternalRoute(localMessageGetCurrentCycleLength, s.internalMessageChannel)
 	router.Router.AddInternalRoute(localMessageVerifierInCurrentCycle, s.internalMessageChannel)
 	router.Router.AddInternalRoute(localMessageHasCycleAt, s.internalMessageChannel)
+	router.Router.AddInternalRoute(localMessageMaximumTransactionsForBlockAssembly, s.internalMessageChannel)
 	s.currentCycle = make([][]byte, 0, 0)
 	s.cycleBuffer = make([][]byte, 0, 0)
 	s.bufferHeadHeight = -1

@@ -111,6 +111,9 @@ func (s *mockCycleAuthorityState) GetTopNewVerifier() []byte {
 func (s *mockCycleAuthorityState) ShouldPenalizeVerifier(verifier []byte) bool {
 	return false
 }
+func (s *mockCycleAuthorityState) GetMaximumTransactionsForBlockAssembly() int {
+	return 10
+}
 
 func TestBlockConsolidation(t *testing.T) {
 	// extract a consolidated block file
