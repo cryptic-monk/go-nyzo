@@ -61,6 +61,7 @@ type TransactionManagerInterface interface {
 	ValidTransactionsOnly(transactions []*blockchain_data.Transaction, startTimestamp int64) []*blockchain_data.Transaction
 	SeedTransactionForBlock(height int64) *blockchain_data.Transaction
 	TransactionsForHeight(height int64) []*blockchain_data.Transaction
+	ApprovedTransactionsForBlock(transactions []*blockchain_data.Transaction, previousBlock *blockchain_data.Block, forBlockAssembly bool) []*blockchain_data.Transaction
 }
 
 type MeshListenerInterface interface {
