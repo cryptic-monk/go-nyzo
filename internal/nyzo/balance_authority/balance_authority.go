@@ -13,10 +13,8 @@ import (
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/interfaces"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages"
-	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/router"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
-	"github.com/cryptic-monk/go-nyzo/pkg/identity"
 	"sort"
 )
 
@@ -71,14 +69,14 @@ func UpdateBalanceListForNextBlock(ctxt *interfaces.Context, previousVerifier []
 			// the cycle account has an imaginary id with no known private key
 			var senderId []byte
 			if transaction.Type == blockchain_data.TransactionTypeCycle {
-				senderId, _ = identity.NyzoHexToBytes([]byte(configuration.CycleAccountNyzoHex), message_fields.SizeNodeIdentifier)
+				senderId = configuration.CycleAccount
 			} else {
 				senderId = transaction.SenderId
 			}
 			// adjust sender account
 			if transaction.Type != blockchain_data.TransactionTypeCoinGeneration && transaction.Type != blockchain_data.TransactionTypeCycleSignature {
 				senderBalance = new(int64)
-				*senderBalance = adjustBalance(balanceList, senderId, -transaction.Amount)
+				*senderBalance = balanceList.AdjustBalance(senderId, -transaction.Amount)
 			} else {
 				senderBalance = nil
 			}
@@ -89,7 +87,7 @@ func UpdateBalanceListForNextBlock(ctxt *interfaces.Context, previousVerifier []
 				recipientBalance = new(int64)
 				*amount = transaction.Amount
 				*amountAfterFee = transaction.Amount - transaction.GetFee()
-				*recipientBalance = adjustBalance(balanceList, transaction.RecipientId, *amountAfterFee)
+				*recipientBalance = balanceList.AdjustBalance(transaction.RecipientId, *amountAfterFee)
 			} else {
 				amount = nil
 				amountAfterFee = nil
@@ -113,10 +111,7 @@ func UpdateBalanceListForNextBlock(ctxt *interfaces.Context, previousVerifier []
 				organicTransactionFees += transaction.GetFee()
 			}
 			// keep track of locked account transactions
-			if transaction.Type != blockchain_data.TransactionTypeCoinGeneration &&
-				transaction.Type != blockchain_data.TransactionTypeSeed &&
-				configuration.IsLockedAccount(transaction.SenderId) &&
-				!bytes.Equal(transaction.RecipientId, configuration.CycleAccount) {
+			if transaction.IsSubjectToLock() {
 				transactionSumFromLockedAccounts += transaction.Amount
 			}
 		}
@@ -133,7 +128,7 @@ func UpdateBalanceListForNextBlock(ctxt *interfaces.Context, previousVerifier []
 		cycleTransferAmount := new(int64)
 		recipientBalance := new(int64)
 		*cycleTransferAmount = organicTransactionFees / 100
-		*recipientBalance = adjustBalance(balanceList, configuration.CycleAccount, *cycleTransferAmount)
+		*recipientBalance = balanceList.AdjustBalance(configuration.CycleAccount, *cycleTransferAmount)
 		feesThisBlock -= *cycleTransferAmount
 		if emitTransactions {
 			canonical = emitTransaction(thisBlock.Height, canonical, thisBlock.StartTimestamp, byte(blockchain_data.TransactionTypeCycleReward), nil, configuration.CycleAccount, nil, cycleTransferAmount, cycleTransferAmount, nil, recipientBalance, nil, nil, nil)
@@ -182,13 +177,13 @@ func UpdateBalanceListForNextBlock(ctxt *interfaces.Context, previousVerifier []
 	*feesPerVerifier = totalFees / int64(len(balanceList.PreviousVerifiers)+1)
 	if *feesPerVerifier > 0 {
 		recipientBalance := new(int64)
-		*recipientBalance = adjustBalance(balanceList, thisBlock.VerifierIdentifier, *feesPerVerifier)
+		*recipientBalance = balanceList.AdjustBalance(thisBlock.VerifierIdentifier, *feesPerVerifier)
 		if emitTransactions {
 			canonical = emitTransaction(thisBlock.Height, canonical, thisBlock.StartTimestamp, byte(blockchain_data.TransactionTypeVerifierReward), nil, thisBlock.VerifierIdentifier, nil, feesPerVerifier, feesPerVerifier, nil, recipientBalance, nil, nil, nil)
 		}
 		for _, previousVerifier := range balanceList.PreviousVerifiers {
 			recipientBalance := new(int64)
-			*recipientBalance = adjustBalance(balanceList, previousVerifier, *feesPerVerifier)
+			*recipientBalance = balanceList.AdjustBalance(previousVerifier, *feesPerVerifier)
 			if emitTransactions {
 				canonical = emitTransaction(thisBlock.Height, canonical, thisBlock.StartTimestamp, byte(blockchain_data.TransactionTypeVerifierReward), nil, previousVerifier, nil, feesPerVerifier, feesPerVerifier, nil, recipientBalance, nil, nil, nil)
 			}
@@ -234,42 +229,6 @@ func UpdateBalanceListForNextBlock(ctxt *interfaces.Context, previousVerifier []
 		logging.ErrorLog.Fatalf("Could not update balance list to height %d, micronyzos in system value incorrect, have: %d, should: %d. Rollover fees: %d. Dumped full balance list to stdout.", balanceList.BlockHeight, micronyzosInSystem, configuration.MicronyzosInSystem, balanceList.RolloverFees)
 		return nil
 	}
-}
-
-// Adjust the balance list entry with the given account id by the given amount (adding an item to the list if necessary). Returns the amount after adjustment.
-func adjustBalance(balanceList *blockchain_data.BalanceList, id []byte, amount int64) int64 {
-	// do return adjusted balance even if the amount is 0, but...
-	for i, item := range balanceList.Items {
-		if bytes.Equal(item.Identifier, id) {
-			item.Balance += amount
-			balanceList.Items[i] = item
-			return item.Balance
-		}
-	}
-	// ...don't create entries for 0 balances
-	if amount == 0 {
-		return 0
-	}
-	item := blockchain_data.BalanceListItem{
-		Identifier:     id,
-		Balance:        amount,
-		BlocksUntilFee: configuration.BlocksBetweenFee,
-	}
-	if bytes.Equal(id, configuration.TransferAccount) {
-		item.BlocksUntilFee = 0
-	}
-	balanceList.Items = append(balanceList.Items, item)
-	return amount
-}
-
-// Get balance for the given ID, only used here for now.
-func getBalance(balanceList *blockchain_data.BalanceList, id []byte) int64 {
-	for _, item := range balanceList.Items {
-		if bytes.Equal(item.Identifier, id) {
-			return item.Balance
-		}
-	}
-	return 0
 }
 
 // Process V2 cycle transactions and signatures as part of the above UpdateBalanceListForNextBlock.
@@ -354,7 +313,7 @@ func processV2CycleTransactions(ctxt *interfaces.Context, canonical int32, balan
 	for _, approvedTransaction := range balanceList.RecentlyApprovedCycleTransactions {
 		recentCycleTransactionSum += approvedTransaction.Amount
 	}
-	cycleAccountBalance := getBalance(balanceList, configuration.CycleAccount)
+	cycleAccountBalance := balanceList.GetBalance(configuration.CycleAccount)
 	maximumCycleTransactionAmount := configuration.MaximumCycleTransactionAmount - recentCycleTransactionSum
 	if cycleAccountBalance < maximumCycleTransactionAmount {
 		maximumCycleTransactionAmount = cycleAccountBalance
@@ -409,8 +368,8 @@ func processV2CycleTransactions(ctxt *interfaces.Context, canonical int32, balan
 		senderBalance := new(int64)
 		recipientBalance := new(int64)
 		amount := new(int64)
-		*senderBalance = adjustBalance(balanceList, configuration.CycleAccount, -approvedCycleTransaction.Amount)
-		*recipientBalance = adjustBalance(balanceList, approvedCycleTransaction.RecipientId, approvedCycleTransaction.Amount)
+		*senderBalance = balanceList.AdjustBalance(configuration.CycleAccount, -approvedCycleTransaction.Amount)
+		*recipientBalance = balanceList.AdjustBalance(approvedCycleTransaction.RecipientId, approvedCycleTransaction.Amount)
 		*amount = approvedCycleTransaction.Amount
 		// Emit the transaction.
 		if emitTransactions {
@@ -433,16 +392,6 @@ func emitTransaction(height int64, canonical int32, timestamp int64, transaction
 	return canonical
 }
 
-// Does the given id exist in the balance list?
-func hasAccount(balanceList *blockchain_data.BalanceList, id []byte) bool {
-	for _, item := range balanceList.Items {
-		if bytes.Equal(item.Identifier, id) {
-			return true
-		}
-	}
-	return false
-}
-
 // To prevent issues related to an exceptionally large balance list, some limitations are needed to avoid the
 // creation of many small accounts. There are two ways to create many accounts with little funds: directly, by
 // transferring a small amount to a new account, and indirectly, by transferring a larger amount away from an
@@ -462,13 +411,13 @@ func transactionSpamsBalanceList(balanceList *blockchain_data.BalanceList, trans
 		// for a new account is less confusing than a minimum of ∩10.025063. A transaction of only μ1 will not spam
 		// the balance list, as the full transaction amount is consumed by the transaction fee, and a new entry is
 		// not created in the balance list.
-		if !hasAccount(balanceList, transaction.RecipientId) && transaction.Amount > 1 && transaction.Amount < configuration.MinimumPreferredBalance {
+		if !balanceList.HasAccount(transaction.RecipientId) && transaction.Amount > 1 && transaction.Amount < configuration.MinimumPreferredBalance {
 			isSpam = true
 		} else {
 			// This is the indirect case. The existing account needs to have at least ∩10 in it or be empty after
 			// the block. All transactions must be considered, or multiple transactions could be sent from a single
 			// account to bypass the rule.
-			senderBalance := getBalance(balanceList, transaction.SenderId)
+			senderBalance := balanceList.GetBalance(transaction.SenderId)
 			var senderSum int64
 			for _, blockTransaction := range allTransactionsInBlock {
 				if bytes.Equal(blockTransaction.SenderId, transaction.SenderId) {

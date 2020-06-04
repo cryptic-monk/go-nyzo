@@ -31,22 +31,25 @@ const (
 )
 
 type state struct {
-	ctxt                      *interfaces.Context
-	genesisHash               []byte
-	frozenEdgeHeight          int64
-	frozenEdgeBlock           *blockchain_data.Block
-	bootstrapFrozenEdgeHeight int64
-	bootstrapFrozenEdgeHash   []byte
-	messageChannel            chan *messages.Message              // here's where we'll receive the messages we are registering for
-	internalMessageChannel    chan *messages.InternalMessage      // channel for internal and local messages
-	chainLoaded               bool                                // true after we loaded any available historical chain info (from disk or online repo)
-	chainInitialized          bool                                // true once the chain is ready for operation (ready to be added to)
-	managedVerifiers          []*networking.ManagedVerifier       // handled by node manager, copied here for mere convenience
-	managedVerifierStatus     []*networking.ManagedVerifierStatus // status tracked by block fetching process
-	lastBlockRequestedTime    int64                               // last block with votes request
-	blockSpeedTracker         int64                               // tracks block speed (important e.g. during historical loading/catchup)
-	lastSpeedTrackingBlock    int64
-	fastChainInitialization   bool // read from preferences file, set to true to speedup chain initialization (especially historical loading in archive mode), at the cost of some (pretty theoretical) security
+	ctxt                        *interfaces.Context
+	genesisBlock                *blockchain_data.Block
+	frozenEdgeHeight            int64
+	frozenEdgeBlock             *blockchain_data.Block
+	bootstrapFrozenEdgeHeight   int64
+	bootstrapFrozenEdgeHash     []byte
+	messageChannel              chan *messages.Message              // here's where we'll receive the messages we are registering for
+	internalMessageChannel      chan *messages.InternalMessage      // channel for internal and local messages
+	chainLoaded                 bool                                // true after we loaded any available historical chain info (from disk or online repo)
+	chainInitialized            bool                                // true once the chain is ready for operation (ready to be added to)
+	managedVerifiers            []*networking.ManagedVerifier       // handled by node manager, copied here for mere convenience
+	managedVerifierStatus       []*networking.ManagedVerifierStatus // status tracked by block fetching process
+	lastBlockRequestedTime      int64                               // last block with votes request
+	blockSpeedTracker           int64                               // tracks block speed
+	lastSpeedTrackingBlock      int64                               // speed = time elapsed / (current height - last speed tracking height)
+	lastBlockReceivedTime       int64                               // last time we received a valid block from the mesh
+	calculatingValidChainScores bool                                // are we able to score the chain?
+	blocksForVerifiers          []*blockchain_data.Block            // blocks we produced for our managed verifiers
+	fastChainInitialization     bool                                // read from preferences file, set to true to speedup chain initialization (especially historical loading in archive mode), at the cost of some (pretty theoretical) security
 }
 
 // Do a full verification of this block: signature (including transactions) and continuity.
@@ -79,7 +82,13 @@ func (s *state) BlockIsValid(block *blockchain_data.Block) bool {
 
 // Get the genesis block hash, used for seed transactions.
 func (s *state) GetGenesisBlockHash() []byte {
-	return s.genesisHash
+	return s.genesisBlock.Hash
+}
+
+// Get the genesis block timestamp. Nyzo's block times are deterministic, any block's start time will always be
+// genesis timestamp + (height * block time)
+func (s *state) GetGenesisBlockTimestamp() int64 {
+	return s.genesisBlock.VerificationTimestamp
 }
 
 // Output frozen edge plus block processing speed stats.
@@ -114,6 +123,11 @@ func (s *state) freezeBlock(block *blockchain_data.Block, balanceList *blockchai
 		// set the frozen edge
 		s.frozenEdgeHeight = block.Height
 		s.frozenEdgeBlock = block
+		// sentinel behavior: keep track of the last block we got, truncate list of pre produced blocks for past height
+		s.lastBlockReceivedTime = time.Now().UnixNano() / 1000000
+		if s.blocksForVerifiers != nil {
+			s.blocksForVerifiers = nil
+		}
 		// output statistics
 		if s.chainInitialized || s.ctxt.RunMode() != interfaces.RunModeArchive || block.Height%1000 == 0 {
 			s.printFrozenEdgeStats(block)
@@ -162,7 +176,7 @@ func (s *state) loadGenesisBlock() error {
 	// Java tries to load the block from a trusted source, which is not a good idea IMO.
 	genesisBlock := s.ctxt.BlockHandler.GetBlock(0, nil)
 	if genesisBlock != nil {
-		s.genesisHash = genesisBlock.Hash
+		s.genesisBlock = genesisBlock
 		s.freezeBlock(genesisBlock, nil)
 	} else {
 		return errors.New("cannot load genesis block")
@@ -442,7 +456,8 @@ func (s *state) Start() {
 		s.managedVerifierStatus[i].QueryHistory = make([]int, queryHistoryLength)
 	}
 	s.blockSpeedTracker = time.Now().UnixNano() / 1000000
-	chainWatcherTicker := time.NewTicker(2 * time.Second)
+	s.lastBlockReceivedTime = time.Now().UnixNano() / 1000000
+	chainWatcherTicker := time.NewTicker(1 * time.Second)
 	done := false
 	for !done {
 		select {
@@ -486,6 +501,8 @@ func (s *state) Start() {
 			} else if s.ctxt.RunMode() == interfaces.RunModeArchive || s.ctxt.RunMode() == interfaces.RunModeSentinel {
 				// these modes just watch the chain
 				s.watchChain()
+				// ... and transmit blocks if necessary
+				s.transmitBlockIfNecessary()
 			} else {
 				// initialization done
 				chainWatcherTicker.Stop()

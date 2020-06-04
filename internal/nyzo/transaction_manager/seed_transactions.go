@@ -18,6 +18,8 @@ const (
 	totalSeedTransactions              = transactionsPerYear * 6
 	lowestSeedTransactionHeight  int64 = 2
 	highestSeedTransactionHeight       = lowestSeedTransactionHeight + totalSeedTransactions - 1
+	initialSeedTransactionAmount       = 599 * configuration.MicronyzoMultiplierRatio
+	finalSeedTransactionAmount         = 13758709
 )
 
 // This should be called every 30 seconds to make sure that we always have enough seed transactions to hand out.

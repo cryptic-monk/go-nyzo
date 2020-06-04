@@ -7,6 +7,7 @@ package blockchain_data
 
 import (
 	"bytes"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 	"io"
@@ -214,4 +215,50 @@ func (bl *BalanceList) Read(r io.Reader) error {
 
 	}
 	return nil
+}
+
+// Does the given id exist in the balance list?
+func (bl *BalanceList) HasAccount(id []byte) bool {
+	for _, item := range bl.Items {
+		if bytes.Equal(item.Identifier, id) {
+			return true
+		}
+	}
+	return false
+}
+
+// Get balance for the given ID.
+func (bl *BalanceList) GetBalance(id []byte) int64 {
+	for _, item := range bl.Items {
+		if bytes.Equal(item.Identifier, id) {
+			return item.Balance
+		}
+	}
+	return 0
+}
+
+// Adjust the balance list entry with the given account id by the given amount (adding an item to the list if necessary). Returns the amount after adjustment.
+func (bl *BalanceList) AdjustBalance(id []byte, amount int64) int64 {
+	// do return adjusted balance even if the amount is 0, but...
+	for i, item := range bl.Items {
+		if bytes.Equal(item.Identifier, id) {
+			item.Balance += amount
+			bl.Items[i] = item
+			return item.Balance
+		}
+	}
+	// ...don't create entries for 0 balances
+	if amount == 0 {
+		return 0
+	}
+	item := BalanceListItem{
+		Identifier:     id,
+		Balance:        amount,
+		BlocksUntilFee: configuration.BlocksBetweenFee,
+	}
+	if bytes.Equal(id, configuration.TransferAccount) {
+		item.BlocksUntilFee = 0
+	}
+	bl.Items = append(bl.Items, item)
+	return amount
 }

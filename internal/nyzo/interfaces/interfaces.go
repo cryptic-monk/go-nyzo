@@ -50,6 +50,8 @@ type BlockAuthorityInterface interface {
 	BlockIsValid(block *blockchain_data.Block) bool
 	// Get the genesis block hash, used for seed transactions.
 	GetGenesisBlockHash() []byte
+	// Get genesis block timestamp.
+	GetGenesisBlockTimestamp() int64
 }
 
 type TransactionManagerInterface interface {
@@ -58,6 +60,7 @@ type TransactionManagerInterface interface {
 	// Hence the startTimestamp: only transactions between startTimestamp and startTimestamp + BlockDuration are allowed into a block.
 	ValidTransactionsOnly(transactions []*blockchain_data.Transaction, startTimestamp int64) []*blockchain_data.Transaction
 	SeedTransactionForBlock(height int64) *blockchain_data.Transaction
+	TransactionsForHeight(height int64) []*blockchain_data.Transaction
 }
 
 type MeshListenerInterface interface {

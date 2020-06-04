@@ -78,6 +78,8 @@ const (
 	TransferAccountNyzoHex = "0000000000000000-0000000000000000-0000000000000000-0000000000000001"
 	// Imaginary account (no known private key) for cycle funding
 	CycleAccountNyzoHex = "0000000000000000-0000000000000000-0000000000000000-0000000000000002"
+	// Seed funding account id.
+	SeedAccountNyzoHex = "12d454a69523f739-eb5eb71c7deb8701-1804df336ae0e2c1-9e0b24a636683e31"
 
 	// How long a new verifier has to wait until it enters the lottery, in milliseconds (30 days)
 	LotteryWaitTime = 1000 * 60 * 60 * 24 * 30
@@ -114,6 +116,7 @@ var LockedAccounts map[string]struct{}
 var GenesisVerifier []byte
 var TransferAccount []byte
 var CycleAccount []byte
+var SeedAccount []byte
 
 // Make sure that our environment is set up correctly and that we have all the info needed to start a node.
 func EnsureSetup() error {
@@ -238,5 +241,6 @@ func init() {
 	GenesisVerifier, _ = identity.NyzoHexToBytes([]byte(GenesisVerifierNyzoHex), 32)
 	TransferAccount, _ = identity.NyzoHexToBytes([]byte(TransferAccountNyzoHex), 32)
 	CycleAccount, _ = identity.NyzoHexToBytes([]byte(CycleAccountNyzoHex), 32)
+	SeedAccount, _ = identity.NyzoHexToBytes([]byte(SeedAccountNyzoHex), 32)
 	loadLockedAccounts()
 }

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"errors"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 	"io"
@@ -95,11 +96,11 @@ func (t *Transaction) GetSerializedLength() int {
 
 // Serializable interface: convert to bytes.
 func (t *Transaction) ToBytes() []byte {
-	return t.serialize(false)
+	return t.Serialize(false)
 }
 
 // Serialize (for message passing or signing)
-func (t *Transaction) serialize(forSigning bool) []byte {
+func (t *Transaction) Serialize(forSigning bool) []byte {
 	var serialized []byte
 	serialized = append(serialized, t.Type)
 	serialized = append(serialized, message_fields.SerializeInt64(t.Timestamp)...)
@@ -303,7 +304,7 @@ func (t *Transaction) GetFee() int64 {
 // Verify this transaction's signature (if necessary) and return whether it's valid.
 func (t *Transaction) SignatureIsValid() bool {
 	if t.SignatureState == Undetermined && (t.Type == TransactionTypeSeed || t.Type == TransactionTypeStandard || t.Type == TransactionTypeCycle || t.Type == TransactionTypeCycleSignature) {
-		if ed25519.Verify(t.SenderId, t.serialize(true), t.Signature) {
+		if ed25519.Verify(t.SenderId, t.Serialize(true), t.Signature) {
 			t.SignatureState = Valid
 		} else {
 			t.SignatureState = Invalid
@@ -315,4 +316,20 @@ func (t *Transaction) SignatureIsValid() bool {
 		t.SignatureState = Valid
 	}
 	return t.SignatureState == Valid
+}
+
+// Verify whether the given identifier has signed the transaction with the given signature (used for cycle signatures).
+func (t *Transaction) ValidSignatureBy(id []byte, signature []byte) bool {
+	return ed25519.Verify(id, t.Serialize(true), signature)
+}
+
+// Dev account locking mechanism.
+func (t *Transaction) IsSubjectToLock() bool {
+	if t.Type != TransactionTypeCoinGeneration &&
+		t.Type != TransactionTypeSeed &&
+		configuration.IsLockedAccount(t.SenderId) &&
+		!bytes.Equal(t.RecipientId, configuration.CycleAccount) {
+		return true
+	}
+	return false
 }
