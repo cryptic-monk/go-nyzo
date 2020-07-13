@@ -143,3 +143,8 @@ func (b *Block) StandardTransactionSum() (sum int64) {
 	}
 	return sum
 }
+
+// Output as string (e.g. for logging).
+func (b *Block) String() string {
+	return fmt.Sprintf("[Block: v=%v, height=%v, hash=%v, id=%v]", b.BlockchainVersion, b.Height, utilities.ByteArrayToString(b.Hash), utilities.ByteArrayToString(b.VerifierIdentifier))
+}

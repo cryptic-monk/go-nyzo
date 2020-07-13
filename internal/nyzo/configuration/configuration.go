@@ -92,10 +92,13 @@ const (
 	ListeningPortUdp = 9446
 
 	// Keys for persistent data key value store
-	HaveNodeHistoryKey           = "have_node_history"
-	WinningIdentifierKey         = "winning_identifier"
-	LastVerifierJoinHeightKey    = "last_verifier_join_height"
-	LastVerifierRemovalHeightKey = "last_verifier_removal_height"
+	HaveNodeHistoryKey             = "have_node_history"
+	WinningIdentifierKey           = "winning_identifier"
+	LastVerifierJoinHeightKey      = "last_verifier_join_height"
+	LastVerifierRemovalHeightKey   = "last_verifier_removal_height"
+	LastBlockTransmissionHeightKey = "sentinel_last_block_transmission_height"
+	LastBlockTransmissionInfoKey   = "sentinel_last_block_transmitted"
+	LastBlockTransmissionResultKey = "sentinel_last_block_transmission_results"
 
 	// Keys for user preferences
 	SqlProtocolKey                         = "sql_protocol"

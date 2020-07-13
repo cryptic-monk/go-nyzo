@@ -31,25 +31,23 @@ const (
 )
 
 type state struct {
-	ctxt                        *interfaces.Context
-	genesisBlock                *blockchain_data.Block
-	frozenEdgeHeight            int64
-	frozenEdgeBlock             *blockchain_data.Block
-	bootstrapFrozenEdgeHeight   int64
-	bootstrapFrozenEdgeHash     []byte
-	messageChannel              chan *messages.Message              // here's where we'll receive the messages we are registering for
-	internalMessageChannel      chan *messages.InternalMessage      // channel for internal and local messages
-	chainLoaded                 bool                                // true after we loaded any available historical chain info (from disk or online repo)
-	chainInitialized            bool                                // true once the chain is ready for operation (ready to be added to)
-	managedVerifiers            []*networking.ManagedVerifier       // handled by node manager, copied here for mere convenience
-	managedVerifierStatus       []*networking.ManagedVerifierStatus // status tracked by block fetching process
-	lastBlockRequestedTime      int64                               // last block with votes request
-	blockSpeedTracker           int64                               // tracks block speed
-	lastSpeedTrackingBlock      int64                               // speed = time elapsed / (current height - last speed tracking height)
-	lastBlockReceivedTime       int64                               // last time we received a valid block from the mesh
-	calculatingValidChainScores bool                                // are we able to score the chain?
-	blocksForVerifiers          []*blockchain_data.Block            // blocks we produced for our managed verifiers
-	fastChainInitialization     bool                                // read from preferences file, set to true to speedup chain initialization (especially historical loading in archive mode), at the cost of some (pretty theoretical) security
+	ctxt                      *interfaces.Context
+	genesisBlock              *blockchain_data.Block
+	frozenEdgeHeight          int64
+	frozenEdgeBlock           *blockchain_data.Block
+	bootstrapFrozenEdgeHeight int64
+	bootstrapFrozenEdgeHash   []byte
+	messageChannel            chan *messages.Message              // here's where we'll receive the messages we are registering for
+	internalMessageChannel    chan *messages.InternalMessage      // channel for internal and local messages
+	chainLoaded               bool                                // true after we loaded any available historical chain info (from disk or online repo)
+	chainInitialized          bool                                // true once the chain is ready for operation (ready to be added to)
+	managedVerifiers          []*networking.ManagedVerifier       // handled by node manager, copied here for mere convenience
+	managedVerifierStatus     []*networking.ManagedVerifierStatus // status tracked by block fetching process
+	lastBlockRequestedTime    int64                               // last block with votes request
+	blockSpeedTracker         int64                               // tracks block speed
+	lastSpeedTrackingBlock    int64                               // speed = time elapsed / (current height - last speed tracking height)
+	fastChainInitialization   bool                                // read from preferences file, set to true to speedup chain initialization (especially historical loading in archive mode), at the cost of some (pretty theoretical) security
+	sentinel                  sentinelData                        // data used to steer the sentinel behavior
 }
 
 // Do a full verification of this block: signature (including transactions) and continuity.
@@ -124,10 +122,8 @@ func (s *state) freezeBlock(block *blockchain_data.Block, balanceList *blockchai
 		s.frozenEdgeHeight = block.Height
 		s.frozenEdgeBlock = block
 		// sentinel behavior: keep track of the last block we got, truncate list of pre produced blocks for past height
-		s.lastBlockReceivedTime = time.Now().UnixNano() / 1000000
-		if s.blocksForVerifiers != nil {
-			s.blocksForVerifiers = nil
-		}
+		s.sentinel.lastBlockReceivedTime = time.Now().UnixNano() / 1000000
+		s.sentinel.blocksForVerifiers = nil
 		// output statistics
 		if s.chainInitialized || s.ctxt.RunMode() != interfaces.RunModeArchive || block.Height%1000 == 0 {
 			s.printFrozenEdgeStats(block)
@@ -456,7 +452,8 @@ func (s *state) Start() {
 		s.managedVerifierStatus[i].QueryHistory = make([]int, queryHistoryLength)
 	}
 	s.blockSpeedTracker = time.Now().UnixNano() / 1000000
-	s.lastBlockReceivedTime = time.Now().UnixNano() / 1000000
+	// prevents that we immediately send a block
+	s.sentinel.lastBlockReceivedTime = time.Now().UnixNano() / 1000000
 	chainWatcherTicker := time.NewTicker(1 * time.Second)
 	done := false
 	for !done {
@@ -486,6 +483,8 @@ func (s *state) Start() {
 			}
 		case m := <-s.messageChannel:
 			switch m.Type {
+			case messages.TypeNewBlockResponse:
+				s.sentinel.blockTransmissionSuccessCount++
 			case messages.TypeBlockResponse:
 				s.processBlockResponse(m)
 			case messages.TypeBlockWithVotesResponse:
@@ -503,6 +502,8 @@ func (s *state) Start() {
 				s.watchChain()
 				// ... and transmit blocks if necessary
 				s.transmitBlockIfNecessary()
+				// ... check on transmission results
+				s.checkBlockTransmissionResult()
 			} else {
 				// initialization done
 				chainWatcherTicker.Stop()
@@ -515,6 +516,7 @@ func (s *state) Start() {
 func (s *state) Initialize() error {
 	// set message routes
 	s.messageChannel = make(chan *messages.Message, 20)
+	router.Router.AddRoute(messages.TypeNewBlockResponse, s.messageChannel)
 	router.Router.AddRoute(messages.TypeBlockResponse, s.messageChannel)
 	router.Router.AddRoute(messages.TypeBlockWithVotesResponse, s.messageChannel)
 	s.internalMessageChannel = make(chan *messages.InternalMessage, 150)
@@ -522,6 +524,7 @@ func (s *state) Initialize() error {
 	router.Router.AddInternalRoute(messages.TypeInternalBootstrapBlock, s.internalMessageChannel)
 	router.Router.AddInternalRoute(messages.TypeInternalExiting, s.internalMessageChannel)
 	s.fastChainInitialization = s.ctxt.Preferences.Retrieve(configuration.FastChainInitializationKey, "0") == "1"
+	s.loadSentinelPersistentData()
 	err := s.loadGenesisBlock()
 	return err
 }

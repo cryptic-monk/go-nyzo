@@ -5,6 +5,7 @@ package utilities
 
 import (
 	"bytes"
+	"fmt"
 )
 
 // Returns true if the given array of byte arrays contains lookFor
@@ -38,4 +39,16 @@ func ByteArrayCopy(source []byte, length int) []byte {
 	result := make([]byte, length)
 	copy(result, source)
 	return result
+}
+
+func ByteArrayToString(a []byte) string {
+	if a == nil {
+		return "(null)"
+	} else if len(a) == 0 {
+		return "(empty)"
+	} else if len(a) <= 4 {
+		return fmt.Sprintf("%x", a)
+	} else {
+		return fmt.Sprintf("%x...%x", a[0:2], a[len(a)-2:])
+	}
 }

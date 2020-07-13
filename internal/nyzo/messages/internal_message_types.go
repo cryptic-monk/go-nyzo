@@ -14,5 +14,6 @@ const (
 	TypeInternalCycleEvent         int16 = 11  // cycle DB storage event, payload: see block_file_handler, emitCycleEvents
 	TypeInternalBlock              int16 = 12  // block DB storage event, payload: see block_file_handler, emitBlock
 	TypeInternalNodeStatus         int16 = 13  // node status DB storage event, payload: see node.Status
+	TypeInternalSendToCycle        int16 = 14  // payload[0] is the message to send to all in-cycle nodes
 	TypeInternalExiting            int16 = 200 // exit program gracefully
 )

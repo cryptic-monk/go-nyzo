@@ -52,12 +52,11 @@ type state struct {
 	haveNodeHistory            bool                            // are we confident about our node history?
 	meshRequestWait            int64                           // waiting ... blocks until we do the next mesh request to ensure tight mesh integration
 	bootstrapPhase             bool
-	meshRequestSuccessCount    int                 // first two during normal operation will be cycle only requests, then we ask for the full mesh
-	activeNodeCount            int                 // how many nodes are currently active in the overall mesh?
-	activeCycleIps             map[string]struct{} // ips in the cycle we know to be active
-	activeCycleIpList          []string            // a sorted list of active cycle IPs
-	missingIncycleNodesMessage string              // a string message with a list of missing in cycle nodes
-	randomNodePosition         int                 // instead of finding "random" nodes, we just loop through our node list, I think this should work equally well
+	meshRequestSuccessCount    int          // first two during normal operation will be cycle only requests, then we ask for the full mesh
+	activeNodeCount            int          // how many nodes are currently active in the overall mesh?
+	inCycleNodes               []*node.Node // a list of all in cycle nodes
+	missingIncycleNodesMessage string       // a string message with a list of missing in cycle nodes
+	randomNodePosition         int          // instead of finding "random" nodes, we just loop through our node list, I think this should work equally well
 	frozenEdgeHeight           int64
 	lastWhitelistUpdate        int64
 	chainInitialized           bool
@@ -254,16 +253,14 @@ func (s *state) maintainMeshData() {
 	// after this time, we throw out a node from the map
 	thresholdTimestamp := (time.Now().UnixNano() / 1000000) - configuration.BlockDuration*cycleLength*2
 	s.activeNodeCount = 0
-	s.activeCycleIps = make(map[string]struct{})
-	s.activeCycleIpList = make([]string, 0)
+	s.inCycleNodes = make([]*node.Node, 0)
 	separator := ""
 	missingMessage := ""
 	for ip, n := range s.nodeMap {
 		if n.InactiveTimestamp == -1 {
 			s.activeNodeCount++
 			if s.ctxt.CycleAuthority.VerifierInCurrentCycle(n.Identifier) {
-				s.activeCycleIps[n.IpString] = struct{}{}
-				s.activeCycleIpList = append(s.activeCycleIpList, n.IpString)
+				s.inCycleNodes = append(s.inCycleNodes, n)
 			} else if s.ctxt.RunMode() == interfaces.RunModeArchive {
 				// in archive mode, we keep track of in-cycle verifiers only
 				// we also don't have to be extremely precise about it, as we basically just use them
@@ -284,8 +281,8 @@ func (s *state) maintainMeshData() {
 		s.missingIncycleNodesMessage = missingMessage
 	}
 	rand.Seed(time.Now().UnixNano())
-	rand.Shuffle(len(s.activeCycleIpList), func(i, j int) {
-		s.activeCycleIpList[i], s.activeCycleIpList[j] = s.activeCycleIpList[j], s.activeCycleIpList[i]
+	rand.Shuffle(len(s.inCycleNodes), func(i, j int) {
+		s.inCycleNodes[i], s.inCycleNodes[j] = s.inCycleNodes[j], s.inCycleNodes[i]
 	})
 }
 
@@ -483,17 +480,17 @@ func (s *state) getFullMesh() []*node.Node {
 // This is not actually random, we just loop through a sorted list of all active in-cycle nodes.
 func (s *state) findRandomCycleNode() *node.Node {
 	// normally, this loop should just go through one or two iterations
-	for i := 0; i < len(s.activeCycleIpList); i++ {
+	for i := 0; i < len(s.inCycleNodes); i++ {
 		if s.randomNodePosition == -1 {
 			rand.Seed(time.Now().UnixNano())
-			s.randomNodePosition = rand.Intn(len(s.activeCycleIpList) - 1)
+			s.randomNodePosition = rand.Intn(len(s.inCycleNodes) - 1)
 		}
-		if s.randomNodePosition >= len(s.activeCycleIpList) {
+		if s.randomNodePosition >= len(s.inCycleNodes) {
 			s.randomNodePosition = 0
 		}
-		n, ok := s.nodeMap[s.activeCycleIpList[s.randomNodePosition]]
+		n := s.inCycleNodes[s.randomNodePosition]
 		s.randomNodePosition++
-		if ok && !bytes.Equal(n.Identifier, s.ctxt.Identity.PublicKey) {
+		if !bytes.Equal(n.Identifier, s.ctxt.Identity.PublicKey) {
 			return n
 		}
 	}
@@ -618,6 +615,12 @@ func (s *state) Start() {
 				if n != nil {
 					go networking.FetchTcp(m.Payload[0].(*messages.Message), n.IpAddress, n.PortTcp)
 				}
+			case messages.TypeInternalSendToCycle:
+				for _, n := range s.inCycleNodes {
+					if !bytes.Equal(n.Identifier, s.ctxt.Identity.PublicKey) {
+						go networking.FetchTcp(m.Payload[0].(*messages.Message), n.IpAddress, n.PortTcp)
+					}
+				}
 			case messages.TypeInternalNewFrozenEdgeBlock:
 				block := m.Payload[0].(*blockchain_data.Block)
 				s.frozenEdgeHeight = block.Height
@@ -693,7 +696,7 @@ func (s *state) Start() {
 				}
 			} else {
 				// force a re-entry of the bootstrap phase if we couldn't connect to enough active verifiers
-				if len(s.activeCycleIps) < s.ctxt.CycleAuthority.GetCurrentCycleLength()*3/4 && s.meshRequestSuccessCount == 0 {
+				if len(s.inCycleNodes) < s.ctxt.CycleAuthority.GetCurrentCycleLength()*3/4 && s.meshRequestSuccessCount == 0 {
 					logging.InfoLog.Printf("Re-entereing bootstrap phase, not enough active verifiers found.")
 					s.bootstrapMesh()
 					s.bootstrapPhase = true
@@ -757,6 +760,7 @@ func (s *state) Initialize() error {
 	router.Router.AddInternalRoute(messages.TypeInternalConnectionFailure, s.internalMessageChannel)
 	router.Router.AddInternalRoute(messages.TypeInternalConnectionSuccess, s.internalMessageChannel)
 	router.Router.AddInternalRoute(messages.TypeInternalChainInitialized, s.internalMessageChannel)
+	router.Router.AddInternalRoute(messages.TypeInternalSendToCycle, s.internalMessageChannel)
 	s.haveNodeHistory = s.ctxt.PersistentData.Retrieve(configuration.HaveNodeHistoryKey, "0") == "1"
 	s.activeNodeCount = 0
 	s.randomNodePosition = -1
@@ -783,6 +787,5 @@ func NewNodeManager(ctxt *interfaces.Context) interfaces.NodeManagerInterface {
 	s.nodeMap = make(map[string]*node.Node)
 	s.nodeJoinCache = make([]*node.Node, 0)
 	s.statusRequestCache = make([]*node.Node, 0)
-	s.activeCycleIps = make(map[string]struct{})
 	return s
 }

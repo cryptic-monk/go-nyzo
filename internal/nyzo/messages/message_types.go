@@ -3,6 +3,8 @@ package messages
 const (
 	TypeNodeJoinLegacy           int16 = 3
 	TypeNodeJoinResponseLegacy   int16 = 4
+	TypeNewBlock                 int16 = 9
+	TypeNewBlockResponse         int16 = 10
 	TypeBlockRequest             int16 = 11
 	TypeBlockResponse            int16 = 12
 	TypeMeshRequest              int16 = 15 // request node-information for in-cycle nodes
