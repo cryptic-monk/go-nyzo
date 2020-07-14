@@ -36,6 +36,10 @@ func (s *MockCycleAuthority) GetCurrentCycleLength() int {
 	return 1500
 }
 
+func (s *MockCycleAuthority) GetLastVerifierJoinHeight() int64 {
+	return 1800
+}
+
 func (s *MockCycleAuthority) VerifierInCurrentCycle(id []byte) bool {
 	return true
 }

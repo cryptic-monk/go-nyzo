@@ -87,6 +87,9 @@ type mockCycleAuthorityState struct {
 func (s *mockCycleAuthorityState) GetCurrentCycleLength() int {
 	return 1800
 }
+func (s *mockCycleAuthorityState) GetLastVerifierJoinHeight() int64 {
+	return 1800
+}
 func (s *mockCycleAuthorityState) VerifierInCurrentCycle(id []byte) bool {
 	return true
 }

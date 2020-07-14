@@ -28,6 +28,7 @@ type Context struct {
 	MeshListener       MeshListenerInterface
 	NodeManager        NodeManagerInterface
 	DataStore          Component
+	Api                Component
 }
 
 const (

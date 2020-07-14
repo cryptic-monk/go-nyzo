@@ -120,6 +120,12 @@ func ContextInitialize(ctxt *interfaces.Context) {
 			logging.ErrorLog.Fatal(err.Error())
 		}
 	}
+	if ctxt.Api != nil {
+		err = ctxt.Api.Initialize()
+		if err != nil {
+			logging.ErrorLog.Fatal(err.Error())
+		}
+	}
 }
 
 func ContextStart(ctxt *interfaces.Context) {
@@ -150,6 +156,10 @@ func ContextStart(ctxt *interfaces.Context) {
 	if ctxt.DataStore != nil {
 		ctxt.WaitGroup.Add(1)
 		go ctxt.DataStore.Start()
+	}
+	if ctxt.Api != nil {
+		ctxt.WaitGroup.Add(1)
+		go ctxt.Api.Start()
 	}
 }
 

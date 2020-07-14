@@ -99,6 +99,7 @@ const (
 	LastBlockTransmissionHeightKey = "sentinel_last_block_transmission_height"
 	LastBlockTransmissionInfoKey   = "sentinel_last_block_transmitted"
 	LastBlockTransmissionResultKey = "sentinel_last_block_transmission_results"
+	ApiEnabledKey                  = "api_enabled"
 
 	// Keys for user preferences
 	SqlProtocolKey                         = "sql_protocol"

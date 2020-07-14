@@ -5,6 +5,7 @@ package nyzo
 
 import (
 	"github.com/cryptic-monk/go-nyzo/internal/logging"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/api"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/interfaces"
 )
@@ -23,6 +24,10 @@ func (s *sentinelState) Start() {
 	}
 	s.ctxt.SetRunMode(interfaces.RunModeSentinel)
 	s.ctxt.MeshListener = nil
+	apiEnabled := s.ctxt.Preferences.Retrieve(configuration.ApiEnabledKey, "0")
+	if apiEnabled == "1" {
+		s.ctxt.Api = api.NewApi(s.ctxt)
+	}
 	ContextInitialize(s.ctxt)
 	ContextStart(s.ctxt)
 	WaitForInterrupt()
