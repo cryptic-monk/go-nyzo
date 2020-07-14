@@ -6,13 +6,13 @@ import (
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/networking"
-	"time"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 )
 
 // Send ip requests to all managed verifiers. 1st step to get whitelisted.
 func (s *state) startWhitelistUpdate() {
 	logging.InfoLog.Print("Starting whitelisting process for all managed verifiers.")
-	s.lastWhitelistUpdate = time.Now().UnixNano() / 1000000
+	s.lastWhitelistUpdate = utilities.Now()
 	for _, verifier := range s.managedVerifiers {
 		messageIpRequest := messages.NewLocal(messages.TypeIpAddressRequest, nil, verifier.Identity)
 		go networking.FetchTcpNamed(messageIpRequest, verifier.Host, verifier.Port)

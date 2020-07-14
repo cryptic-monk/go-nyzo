@@ -7,8 +7,8 @@ package node
 import (
 	"errors"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 	"io"
-	"time"
 )
 
 type Node struct {
@@ -29,14 +29,15 @@ type Node struct {
 
 // Create a new node entry
 func NewNode(id, ip []byte, portTcp, portUdp int32) *Node {
+	now := utilities.Now()
 	n := new(Node)
 	n.Identifier = id
 	n.IpAddress = ip
 	n.IpString = message_fields.IP4BytesToString(ip)
 	n.PortTcp = portTcp
 	n.PortUdp = portUdp
-	n.QueueTimestamp = time.Now().UnixNano() / 1000000
-	n.IdentifierChangeTimestamp = time.Now().UnixNano() / 1000000
+	n.QueueTimestamp = now
+	n.IdentifierChangeTimestamp = now
 	n.InactiveTimestamp = -1
 	n.FailedConnectionCount = 0
 	return n
@@ -96,7 +97,7 @@ func (n *Node) Read(r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	n.IdentifierChangeTimestamp = time.Now().UnixNano() / 1000000
+	n.IdentifierChangeTimestamp = utilities.Now()
 	n.InactiveTimestamp = -1
 	n.FailedConnectionCount = 0
 	n.IpString = message_fields.IP4BytesToString(n.IpAddress)

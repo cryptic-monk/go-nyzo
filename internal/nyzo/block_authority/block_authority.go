@@ -21,6 +21,7 @@ import (
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/networking"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/router"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 	"time"
 )
 
@@ -91,14 +92,15 @@ func (s *state) GetGenesisBlockTimestamp() int64 {
 
 // Output frozen edge plus block processing speed stats.
 func (s *state) printFrozenEdgeStats(block *blockchain_data.Block) {
-	milliseconds := (time.Now().UnixNano() / 1000000) - s.blockSpeedTracker
+	now := utilities.Now()
+	milliseconds := now - s.blockSpeedTracker
 	blockCount := block.Height - s.lastSpeedTrackingBlock
 	if blockCount > 0 {
 		milliseconds = milliseconds / blockCount
 	} else {
 		milliseconds = -1
 	}
-	s.blockSpeedTracker = time.Now().UnixNano() / 1000000
+	s.blockSpeedTracker = now
 	s.lastSpeedTrackingBlock = block.Height
 	if milliseconds > 0 {
 		logging.InfoLog.Printf("New frozen edge height reached: %d, milliseconds per block: %d.", block.Height, milliseconds)
@@ -122,7 +124,7 @@ func (s *state) freezeBlock(block *blockchain_data.Block, balanceList *blockchai
 		s.frozenEdgeHeight = block.Height
 		s.frozenEdgeBlock = block
 		// sentinel behavior: keep track of the last block we got, truncate list of pre produced blocks for past height
-		s.sentinel.lastBlockReceivedTime = time.Now().UnixNano() / 1000000
+		s.sentinel.lastBlockReceivedTime = utilities.Now()
 		s.sentinel.blocksForVerifiers = nil
 		// output statistics
 		if s.chainInitialized || s.ctxt.RunMode() != interfaces.RunModeArchive || block.Height%1000 == 0 {
@@ -216,7 +218,7 @@ func (s *state) watchChain() {
 			if s.managedVerifierStatus[i].FastFetchMode {
 				blockUpdateInterval = blockUpdateIntervalFast
 			}
-			timestamp := time.Now().UnixNano() / 1000000
+			timestamp := utilities.Now()
 			currentSlot := int(timestamp / blockUpdateInterval % int64(len(s.managedVerifiers)))
 			if s.managedVerifierStatus[i].LastBlockRequestedTime < timestamp-blockUpdateInterval {
 				if i == currentSlot || s.frozenEdgeBlock.VerificationTimestamp < timestamp-20000 {
@@ -231,7 +233,7 @@ func (s *state) watchChain() {
 	}
 
 	// Fallback: if we fall more than 35s behind the frozen edge, we request a block with votes from a random node.
-	timestamp := time.Now().UnixNano() / 1000000
+	timestamp := utilities.Now()
 	if s.lastBlockRequestedTime < timestamp-blockUpdateIntervalStandard && s.frozenEdgeBlock.VerificationTimestamp < timestamp-35000 {
 		logging.TraceLog.Printf("Sending block with votes request for height %d to random cycle node.", s.frozenEdgeHeight+1)
 		s.lastBlockRequestedTime = timestamp
@@ -316,7 +318,7 @@ func (s *state) processBlockResponse(message *messages.Message) {
 					if len(blockResponseContent.Blocks) > 0 {
 						// if we get a lot of blocks in a row, we are likely lagging behind the chain
 						s.managedVerifierStatus[i].ConsecutiveSuccessfulBlockFetches++
-						timestamp := time.Now().UnixNano() / 1000000
+						timestamp := utilities.Now()
 						if s.managedVerifierStatus[i].ConsecutiveSuccessfulBlockFetches >= 4 && s.frozenEdgeBlock.VerificationTimestamp < timestamp-140000 {
 							s.managedVerifierStatus[i].FastFetchMode = true
 						}
@@ -451,9 +453,10 @@ func (s *state) Start() {
 		s.managedVerifierStatus[i] = new(networking.ManagedVerifierStatus)
 		s.managedVerifierStatus[i].QueryHistory = make([]int, queryHistoryLength)
 	}
-	s.blockSpeedTracker = time.Now().UnixNano() / 1000000
+	now := utilities.Now()
+	s.blockSpeedTracker = now
 	// prevents that we immediately send a block
-	s.sentinel.lastBlockReceivedTime = time.Now().UnixNano() / 1000000
+	s.sentinel.lastBlockReceivedTime = now
 	chainWatcherTicker := time.NewTicker(1 * time.Second)
 	done := false
 	for !done {

@@ -11,10 +11,10 @@ import (
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/blockchain_data"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/interfaces"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 	"github.com/cryptic-monk/go-nyzo/pkg/identity"
 	"io/ioutil"
 	"testing"
-	"time"
 )
 
 var ctxt *interfaces.Context
@@ -70,7 +70,7 @@ Test verification of the first 10K blocks.
 func TestVerifyBlocks(t *testing.T) {
 	var previousBlock *blockchain_data.Block
 	var balanceList *blockchain_data.BalanceList
-	startTime := time.Now().UnixNano() / 1000000
+	startTime := utilities.Now()
 	blocks, _ := ctxt.BlockHandler.GetBlocks(0, 9999)
 	for _, block := range blocks {
 		// verification of the block and any transactions it contains
@@ -96,7 +96,7 @@ func TestVerifyBlocks(t *testing.T) {
 		}
 		previousBlock = block
 	}
-	fmt.Printf("Took %d milliseconds to load and verify 10'000 blocks.", time.Now().UnixNano()/1000000-startTime)
+	fmt.Printf("Took %d milliseconds to load and verify 10'000 blocks.", utilities.Now()-startTime)
 }
 
 // Test balance list normalization.

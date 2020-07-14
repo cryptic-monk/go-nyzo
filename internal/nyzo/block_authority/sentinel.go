@@ -13,7 +13,6 @@ import (
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/router"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
 	"strconv"
-	"time"
 )
 
 const (
@@ -23,22 +22,23 @@ const (
 )
 
 type sentinelData struct {
-	lastBlockReceivedTime          int64  // last time we received a valid block from the mesh
-	lastBlockTransmissionHeight    int64  // height of last block transmission by sentinel
-	lastBlockTransmissionTimestamp int64  // timestamp of last block transmission by sentinel
-	lastBlockTransmissionInfo      string // retains some info about last sentinel block transmission
-	lastBlockTransmissionResult    string // retains some info about last sentinel block transmission success/failure
-	blockTransmissionSuccessCount  int    // number of successful block transmits
-	checkBlockTransmission         bool
-	calculatingValidChainScores    bool                     // are we able to score the chain?
-	blocksForVerifiers             []*blockchain_data.Block // blocks we produced for our managed verifiers
+	lastBlockReceivedTime         int64                    // last time we received a valid block from the mesh
+	lastBlockTransmissionHeight   int64                    // height of last block transmission by sentinel
+	lastBlockTransmissionTime     int64                    // time of last block transmission by sentinel
+	lastBlockTransmissionInfo     string                   // retains some info about last sentinel block transmission
+	lastBlockTransmissionResult   string                   // retains some info about last sentinel block transmission success/failure
+	blockTransmissionSuccessCount int                      // number of successful block transmits
+	checkBlockTransmission        bool                     // did we recently transmit a block? if so, check on results after 3 seconds
+	calculatingValidChainScores   bool                     // are we able to score the chain?
+	blocksForVerifiers            []*blockchain_data.Block // blocks we prepared for our managed verifiers
 }
 
+// Transmit a block if one of the managed verifiers doesn't do its job.
 func (s *state) transmitBlockIfNecessary() {
 	// The block creation delay prevents unnecessary work and unnecessary transmissions to the mesh when the
 	// sentinel is initializing. We also allow the condition to be entered at least once to confirm that the
 	// sentinel is able to calculate valid chain scores.
-	if !s.sentinel.calculatingValidChainScores || s.sentinel.lastBlockReceivedTime < (time.Now().UnixNano()/1000000)-blockCreationDelay {
+	if !s.sentinel.calculatingValidChainScores || s.sentinel.lastBlockReceivedTime < utilities.Now()-blockCreationDelay {
 		// create blocks if necessary, old blocks will be cleared in freezeBlock
 		if s.sentinel.blocksForVerifiers == nil {
 			s.sentinel.blocksForVerifiers = make([]*blockchain_data.Block, len(s.managedVerifiers))
@@ -64,9 +64,9 @@ func (s *state) transmitBlockIfNecessary() {
 				// than the verifier, which will transmit a block whose minimum vote timestamp is up to 10 seconds
 				// in the future.
 				minimumVoteTimestamp := s.frozenEdgeBlock.VerificationTimestamp + configuration.MinimumVerificationInterval + lowestScore*20000 + blockTransmissionDelay
-				now := time.Now().UnixNano() / 1000000
-				if minimumVoteTimestamp < now && s.sentinel.lastBlockTransmissionTimestamp < now-minimumBlockTransmissionInterval {
-					s.sentinel.lastBlockTransmissionTimestamp = now
+				now := utilities.Now()
+				if minimumVoteTimestamp < now && s.sentinel.lastBlockTransmissionTime < now-minimumBlockTransmissionInterval {
+					s.sentinel.lastBlockTransmissionTime = now
 					verifier := s.findManagedVerifierById(lowestScoredBlock.VerifierIdentifier)
 					content := message_content.NewNewBlock(lowestScoredBlock)
 					message := messages.NewLocal(messages.TypeNewBlock, content, verifier.Identity)
@@ -89,7 +89,7 @@ func (s *state) transmitBlockIfNecessary() {
 
 // Check on sentinel block transmission results.
 func (s *state) checkBlockTransmissionResult() {
-	if s.sentinel.checkBlockTransmission && time.Now().UnixNano()/1000000-s.sentinel.lastBlockTransmissionTimestamp > 3000 {
+	if s.sentinel.checkBlockTransmission && utilities.Now()-s.sentinel.lastBlockTransmissionTime > 3000 {
 		s.sentinel.checkBlockTransmission = false
 		failures := s.ctxt.CycleAuthority.GetCurrentCycleLength() - s.sentinel.blockTransmissionSuccessCount
 		s.sentinel.lastBlockTransmissionResult = fmt.Sprintf("%v success, %v fail", s.sentinel.blockTransmissionSuccessCount, failures)
@@ -125,7 +125,7 @@ func (s *state) createNextBlock(previousBlock *blockchain_data.Block, managedVer
 			Height:                previousBlock.Height + 1,
 			PreviousBlockHash:     previousBlock.Hash,
 			StartTimestamp:        s.ctxt.BlockAuthority.GetGenesisBlockTimestamp() + (previousBlock.Height+1)*configuration.BlockDuration,
-			VerificationTimestamp: time.Now().UnixNano() / 1000000,
+			VerificationTimestamp: utilities.Now(),
 			Transactions:          nil,
 			BalanceListHash:       nil,
 			VerifierIdentifier:    managedVerifier.Identity.PublicKey,

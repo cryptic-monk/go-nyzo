@@ -42,7 +42,7 @@ type Message struct {
 // Create a new message, local variant (the ones we can sign).
 func NewLocal(messageType int16, messageContent Serializable, identity *identity.Identity) *Message {
 	message := Message{}
-	message.Timestamp = time.Now().UnixNano() / 1000000
+	message.Timestamp = utilities.Now()
 	message.Type = messageType
 	message.Content = messageContent
 	message.SourceId = identity.PublicKey

@@ -7,7 +7,6 @@ import (
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/interfaces"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
-	"time"
 )
 
 const (
@@ -98,7 +97,7 @@ func (s *state) chainScore(block *blockchain_data.Block, zeroBlockHeight int64) 
 			score = MaxChainScore // invalid
 		}
 		// Check that the verification timestamp is not unreasonably far into the future.
-		if block.VerificationTimestamp > (time.Now().UnixNano()/1000000)+5000 {
+		if block.VerificationTimestamp > utilities.Now()+5000 {
 			score = MaxChainScore // invalid
 		}
 		block = previousBlock

@@ -251,7 +251,7 @@ func (s *state) maintainMeshData() {
 		cycleLength = 10
 	}
 	// after this time, we throw out a node from the map
-	thresholdTimestamp := (time.Now().UnixNano() / 1000000) - configuration.BlockDuration*cycleLength*2
+	thresholdTimestamp := utilities.Now() - configuration.BlockDuration*cycleLength*2
 	s.activeNodeCount = 0
 	s.inCycleNodes = make([]*node.Node, 0)
 	separator := ""
@@ -394,9 +394,10 @@ func (s *state) updateNode(sourceId, sourceIP []byte, portTcp, portUdp int32, ni
 		existingNode.Nickname = nickname
 		existingNode.InactiveTimestamp = -1
 		if !bytes.Equal(existingNode.Identifier, sourceId) {
+			now := utilities.Now()
 			existingNode.Identifier = sourceId
-			existingNode.QueueTimestamp = time.Now().UnixNano() / 1000000
-			existingNode.IdentifierChangeTimestamp = time.Now().UnixNano() / 1000000
+			existingNode.QueueTimestamp = now
+			existingNode.IdentifierChangeTimestamp = now
 			if s.frozenEdgeHeight-existingNode.LastNodeJoinBlock > minimumMeshRequestInterval {
 				s.nodeJoinCache = append(s.nodeJoinCache, existingNode)
 			}
@@ -418,7 +419,7 @@ func (s *state) markFailedConnection(ip string) {
 	if ok {
 		n.FailedConnectionCount++
 		if n.FailedConnectionCount >= consecutiveFailuresBeforeRemoval {
-			n.InactiveTimestamp = time.Now().UnixNano() / 1000000
+			n.InactiveTimestamp = utilities.Now()
 		}
 	}
 }
@@ -502,7 +503,7 @@ func (s *state) findRandomCycleNode() *node.Node {
 func (s *state) demoteInCycleNodes() {
 	for _, n := range s.nodeMap {
 		if s.ctxt.CycleAuthority.VerifierInCurrentCycle(n.Identifier) {
-			n.QueueTimestamp = time.Now().UnixNano() / 1000000
+			n.QueueTimestamp = utilities.Now()
 		}
 	}
 }
@@ -728,7 +729,7 @@ func (s *state) Start() {
 			}
 			// periodically refresh whitelisting
 			if s.ctxt.RunMode() == interfaces.RunModeSentinel || s.ctxt.RunMode() == interfaces.RunModeArchive {
-				if (time.Now().UnixNano()/1000000)-s.lastWhitelistUpdate > whitelistUpdateInterval {
+				if utilities.Now()-s.lastWhitelistUpdate > whitelistUpdateInterval {
 					s.startWhitelistUpdate()
 				}
 			}
