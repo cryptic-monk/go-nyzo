@@ -9,6 +9,7 @@ import (
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/configuration"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content"
+	"github.com/cryptic-monk/go-nyzo/internal/nyzo/messages/message_content/message_fields"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/networking"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/router"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
@@ -126,20 +127,16 @@ func (s *state) createNextBlock(previousBlock *blockchain_data.Block, managedVer
 			PreviousBlockHash:     previousBlock.Hash,
 			StartTimestamp:        s.ctxt.BlockAuthority.GetGenesisBlockTimestamp() + (previousBlock.Height+1)*configuration.BlockDuration,
 			VerificationTimestamp: utilities.Now(),
-			Transactions:          nil,
-			BalanceListHash:       nil,
 			VerifierIdentifier:    managedVerifier.Identity.PublicKey,
-			VerifierSignature:     nil,
-			ContinuityState:       0,
-			SignatureState:        0,
-			CycleInformation:      nil,
-			Hash:                  nil,
-			CycleInfoCache:        nil,
 		}
 		transactions := s.ctxt.TransactionManager.TransactionsForHeight(block.Height)
 		seedTransaction := s.ctxt.TransactionManager.SeedTransactionForBlock(block.Height)
 		if seedTransaction != nil {
 			transactions = append(transactions, seedTransaction)
+		}
+		sentinelTransaction := s.getSentinelTransaction(previousBlock, managedVerifier)
+		if sentinelTransaction != nil {
+			transactions = append(transactions, sentinelTransaction)
 		}
 		transactions = s.ctxt.TransactionManager.ApprovedTransactionsForBlock(transactions, previousBlock, true)
 		block.Transactions = transactions
@@ -157,4 +154,41 @@ func (s *state) createNextBlock(previousBlock *blockchain_data.Block, managedVer
 		block.Hash = doubleSha[:]
 	}
 	return block
+}
+
+func (s *state) getSentinelTransaction(previousBlock *blockchain_data.Block, managedVerifier *networking.ManagedVerifier) *blockchain_data.Transaction {
+	// If the verifier is supposed to add a sentinel transaction, add it now. This is a 1-micronyzo transaction
+	// from the sender to a dead wallet (all zeros). The minimum transaction fee is 1 micronyzo, so no funds
+	// will be transferred. The only purpose of this transaction is to add metadata to the blockchain.
+	// Out-of-cycle verifiers do not add sentinel transactions, as these transactions would complicate the
+	// block-rebuilding process.
+	if managedVerifier.SentinelTransactionEnabled && s.ctxt.CycleAuthority.VerifierInCurrentCycle(managedVerifier.Identity.PublicKey) {
+		balanceList := s.ctxt.BlockHandler.GetBalanceListForBlock(previousBlock)
+		if balanceList == nil {
+			logging.InfoLog.Print("omitting sentinel transaction due to unavailable balance list")
+		} else {
+			// Only add the sentinel transaction if the balance is over the minimum preferred balance.
+			verifierBalance := balanceList.GetBalance(managedVerifier.Identity.PublicKey)
+			if verifierBalance <= configuration.MinimumPreferredBalance {
+				logging.InfoLog.Printf("omitting sentinel transaction because balance of %v is %v, which is less than minimum preferred balance of %v",
+					utilities.ByteArrayToString(managedVerifier.Identity.PublicKey),
+					verifierBalance,
+					configuration.MinimumPreferredBalance)
+			} else {
+				transaction := &blockchain_data.Transaction{
+					Type:               blockchain_data.TransactionTypeStandard,
+					Timestamp:          previousBlock.StartTimestamp + configuration.BlockDuration + 1,
+					Amount:             1,
+					RecipientId:        make([]byte, message_fields.SizeNodeIdentifier, message_fields.SizeNodeIdentifier),
+					PreviousHashHeight: previousBlock.Height,
+					PreviousBlockHash:  previousBlock.Hash,
+					SenderId:           managedVerifier.Identity.PublicKey,
+					SenderData:         []byte("sentinel version " + configuration.Version),
+				}
+				transaction.Signature = managedVerifier.Identity.Sign(transaction.Serialize(true))
+				return transaction
+			}
+		}
+	}
+	return nil
 }

@@ -20,7 +20,7 @@ import (
 
 const (
 	// Software version
-	Version = "go-550"
+	Version = "go-587"
 	// Comment from original Java version regarding the monetary system:
 	// We want this to be a functioning monetary system. The maximum number of coins is 100 million. The fraction used
 	// for dividing coins is 1 million (all transactions must be a whole-number multiple of 1/1000000 coins).
