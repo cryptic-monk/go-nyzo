@@ -35,6 +35,7 @@ type BlockHandlerInterface interface {
 type CycleAuthorityInterface interface {
 	Component
 	GetCurrentCycleLength() int                                                                 // returns the current cycle length
+	GetLastVerifierJoinHeight() int64                                                           // last height at which a verifier joined
 	VerifierInCurrentCycle(id []byte) bool                                                      // returns true if the verifier with this id is currently in the cycle
 	GetMaximumTransactionsForBlockAssembly() int                                                // transaction rate limiting
 	GetTopNewVerifier() []byte                                                                  // get top voted new verifier
@@ -48,6 +49,8 @@ type BlockAuthorityInterface interface {
 	Component
 	// Do a full verification of this block: signature (including transactions) and continuity.
 	BlockIsValid(block *blockchain_data.Block) bool
+	// Get current open edge height.
+	GetOpenEdgeHeight(forRegistration bool) int64
 	// Get the genesis block hash, used for seed transactions.
 	GetGenesisBlockHash() []byte
 	// Get genesis block timestamp.

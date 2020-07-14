@@ -103,3 +103,40 @@ func fetchHandleConnection(m *messages.Message, conn net.Conn, hostName string) 
 		router.Router.Route(message)
 	}
 }
+
+// Send an UDP message.
+func SendUdp(m *messages.Message, host []byte, port int32) {
+	// we normally use bytes + int, Go uses strings
+	hostString := message_fields.IP4BytesToString(host)
+	portString := strconv.Itoa(int(port))
+	// establish connection
+	conn, err := net.DialTimeout("udp", hostString+":"+portString, messages.ConnectionTimeout)
+	if err != nil {
+		message := messages.NewInternalMessage(messages.TypeInternalConnectionFailure, hostString, m.Type)
+		router.Router.RouteInternal(message)
+		logging.TraceLog.Printf("Error establishing connection to %s: %s.", hostString, err.Error())
+		return
+	} else {
+		message := messages.NewInternalMessage(messages.TypeInternalConnectionSuccess, hostString, m.Type)
+		router.Router.RouteInternal(message)
+	}
+	defer conn.Close()
+
+	sendHandleConnection(m, conn, hostString)
+}
+
+func sendHandleConnection(m *messages.Message, conn net.Conn, hostName string) {
+	// send message
+	//TODO: Do not send a message that will get this IP blacklisted.
+	//See: https://github.com/n-y-z-o/nyzoVerifier/blob/2ea08c5183f6cfed97984249ae78bd1be2961245/src/main/java/co/nyzo/verifier/Message.java#L178
+	data := m.SerializeForTransmission()
+	_ = conn.SetWriteDeadline(time.Now().Add(messages.WriteTimeout))
+	n, err := conn.Write(data)
+	if err != nil || n != len(data) {
+		if err != nil {
+			logging.TraceLog.Printf("Error sending data to %s: %s.", hostName, err.Error())
+		} else {
+			logging.TraceLog.Printf("Error sending data to %s.", hostName)
+		}
+	}
+}

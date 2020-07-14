@@ -99,6 +99,8 @@ func ReadNew(r io.Reader, sourceAddress string) (*Message, error) {
 			message.Content = &message_content.NodeJoin{}
 		case TypeNodeJoinResponse:
 			message.Content = &message_content.NodeJoinResponse{}
+		case TypeMinimalBlock:
+			message.Content = &message_content.MinimalBlock{}
 		case TypeBlockWithVotesResponse:
 			message.Content = &message_content.BlockWithVotesResponse{}
 		case TypeIpAddressResponse:

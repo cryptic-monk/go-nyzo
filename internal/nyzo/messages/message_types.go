@@ -24,6 +24,7 @@ const (
 	TypeFullMeshResponse         int16 = 42 // a (capped) list of all known nodes
 	TypeNodeJoin                 int16 = 43
 	TypeNodeJoinResponse         int16 = 44
+	TypeMinimalBlock             int16 = 51
 	TypeIpAddressRequest         int16 = 53
 	TypeIpAddressResponse        int16 = 54
 	TypeWhitelistRequest         int16 = 424

@@ -28,6 +28,7 @@ const (
 	localMessageVerifierInCurrentCycle              = -2
 	localMessageHasCycleAt                          = -3
 	localMessageMaximumTransactionsForBlockAssembly = -4
+	localMessageGetLastVerifierJoinHeight           = -5
 )
 
 type state struct {
@@ -56,6 +57,12 @@ type state struct {
 func (s *state) GetCurrentCycleLength() int {
 	reply := router.GetInternalReply(localMessageGetCurrentCycleLength)
 	return reply.Payload[0].(int)
+}
+
+// Last height at which a verifier joined. This goes through the loop to make sure we can handle concurrency.
+func (s *state) GetLastVerifierJoinHeight() int64 {
+	reply := router.GetInternalReply(localMessageGetLastVerifierJoinHeight)
+	return reply.Payload[0].(int64)
 }
 
 // Is the given verifier currently in cycle? This goes through the loop to make sure we can handle concurrency.
@@ -462,6 +469,8 @@ func (s *state) Start() {
 			switch m.Type {
 			case localMessageGetCurrentCycleLength:
 				m.ReplyChannel <- messages.NewInternalMessage(localMessageGetCurrentCycleLength, len(s.currentCycle))
+			case localMessageGetLastVerifierJoinHeight:
+				m.ReplyChannel <- messages.NewInternalMessage(localMessageGetLastVerifierJoinHeight, s.lastVerifierJoinHeight)
 			case localMessageVerifierInCurrentCycle:
 				m.ReplyChannel <- messages.NewInternalMessage(localMessageVerifierInCurrentCycle, s.verifierInCurrentCycle(m.Payload[0].([]byte)))
 			case localMessageHasCycleAt:
@@ -527,6 +536,7 @@ func (s *state) Initialize() error {
 	router.Router.AddInternalRoute(localMessageVerifierInCurrentCycle, s.internalMessageChannel)
 	router.Router.AddInternalRoute(localMessageHasCycleAt, s.internalMessageChannel)
 	router.Router.AddInternalRoute(localMessageMaximumTransactionsForBlockAssembly, s.internalMessageChannel)
+	router.Router.AddInternalRoute(localMessageGetLastVerifierJoinHeight, s.internalMessageChannel)
 	s.currentCycle = make([][]byte, 0, 0)
 	s.cycleBuffer = make([][]byte, 0, 0)
 	s.bufferHeadHeight = -1

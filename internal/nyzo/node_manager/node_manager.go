@@ -622,6 +622,12 @@ func (s *state) Start() {
 						go networking.FetchTcp(m.Payload[0].(*messages.Message), n.IpAddress, n.PortTcp)
 					}
 				}
+			case messages.TypeInternalSendToCycleUdp:
+				for _, n := range s.inCycleNodes {
+					if !bytes.Equal(n.Identifier, s.ctxt.Identity.PublicKey) {
+						go networking.SendUdp(m.Payload[0].(*messages.Message), n.IpAddress, n.PortTcp)
+					}
+				}
 			case messages.TypeInternalNewFrozenEdgeBlock:
 				block := m.Payload[0].(*blockchain_data.Block)
 				s.frozenEdgeHeight = block.Height
@@ -762,6 +768,7 @@ func (s *state) Initialize() error {
 	router.Router.AddInternalRoute(messages.TypeInternalConnectionSuccess, s.internalMessageChannel)
 	router.Router.AddInternalRoute(messages.TypeInternalChainInitialized, s.internalMessageChannel)
 	router.Router.AddInternalRoute(messages.TypeInternalSendToCycle, s.internalMessageChannel)
+	router.Router.AddInternalRoute(messages.TypeInternalSendToCycleUdp, s.internalMessageChannel)
 	s.haveNodeHistory = s.ctxt.PersistentData.Retrieve(configuration.HaveNodeHistoryKey, "0") == "1"
 	s.activeNodeCount = 0
 	s.randomNodePosition = -1

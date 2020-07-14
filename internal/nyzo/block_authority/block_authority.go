@@ -90,6 +90,28 @@ func (s *state) GetGenesisBlockTimestamp() int64 {
 	return s.genesisBlock.VerificationTimestamp
 }
 
+// Get current open edge height.
+func (s *state) GetOpenEdgeHeight(forRegistration bool) int64 {
+	if s.genesisBlock == nil {
+		return -1
+	}
+	// A block is considered open for processing 1.5 seconds after it completes. For registration, we reduce the
+	// offset to 0.5 seconds to avoid rejecting blocks due to minor clock differences.
+	var offset int64
+	if forRegistration {
+		offset = 500
+	} else {
+		offset = 1500
+	}
+	return (utilities.Now() - offset - s.genesisBlock.StartTimestamp) / configuration.BlockDuration
+}
+
+// Is it plausible that we are currently accepting new verifiers to the cycle?
+func (s *state) likelyAcceptingNewVerifiers() bool {
+	cycleInformation := s.ctxt.CycleAuthority.GetCycleInformationForBlock(s.frozenEdgeBlock)
+	return s.frozenEdgeBlock != nil && cycleInformation != nil && s.frozenEdgeBlock.Height > s.ctxt.CycleAuthority.GetLastVerifierJoinHeight()+cycleInformation.GetCycleLength()*2
+}
+
 // Output frozen edge plus block processing speed stats.
 func (s *state) printFrozenEdgeStats(block *blockchain_data.Block) {
 	now := utilities.Now()
@@ -507,6 +529,8 @@ func (s *state) Start() {
 				s.transmitBlockIfNecessary()
 				// ... check on transmission results
 				s.checkBlockTransmissionResult()
+				// ... broadcast block for new verifiers
+				s.broadcastNewVerifierBlock()
 			} else {
 				// initialization done
 				chainWatcherTicker.Stop()

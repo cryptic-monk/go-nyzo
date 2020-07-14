@@ -23,15 +23,16 @@ const (
 )
 
 type sentinelData struct {
-	lastBlockReceivedTime         int64                    // last time we received a valid block from the mesh
-	lastBlockTransmissionHeight   int64                    // height of last block transmission by sentinel
-	lastBlockTransmissionTime     int64                    // time of last block transmission by sentinel
-	lastBlockTransmissionInfo     string                   // retains some info about last sentinel block transmission
-	lastBlockTransmissionResult   string                   // retains some info about last sentinel block transmission success/failure
-	blockTransmissionSuccessCount int                      // number of successful block transmits
-	checkBlockTransmission        bool                     // did we recently transmit a block? if so, check on results after 3 seconds
-	calculatingValidChainScores   bool                     // are we able to score the chain?
-	blocksForVerifiers            []*blockchain_data.Block // blocks we prepared for our managed verifiers
+	lastBlockReceivedTime                  int64                    // last time we received a valid block from the mesh
+	lastBlockTransmissionHeight            int64                    // height of last block transmission by sentinel
+	lastBlockTransmissionTime              int64                    // time of last block transmission by sentinel
+	lastBlockTransmissionInfo              string                   // retains some info about last sentinel block transmission
+	lastBlockTransmissionResult            string                   // retains some info about last sentinel block transmission success/failure
+	blockTransmissionSuccessCount          int                      // number of successful block transmits
+	checkBlockTransmission                 bool                     // did we recently transmit a block? if so, check on results after 3 seconds
+	calculatingValidChainScores            bool                     // are we able to score the chain?
+	blocksForVerifiers                     []*blockchain_data.Block // blocks we prepared for our managed verifiers
+	lastNewVerifierBlockTransmissionHeight int64                    // last height at which we broadcast a new verifier block
 }
 
 // Transmit a block if one of the managed verifiers doesn't do its job.
@@ -191,4 +192,28 @@ func (s *state) getSentinelTransaction(previousBlock *blockchain_data.Block, man
 		}
 	}
 	return nil
+}
+
+// Periodically send out minimal blocks for verifiers with potential to join the cycle.
+func (s *state) broadcastNewVerifierBlock() {
+	height := s.frozenEdgeHeight + 1
+	if height%50 == 49 &&
+		height > s.sentinel.lastNewVerifierBlockTransmissionHeight &&
+		height <= s.ctxt.BlockAuthority.GetOpenEdgeHeight(false) &&
+		s.likelyAcceptingNewVerifiers() {
+		s.sentinel.lastNewVerifierBlockTransmissionHeight = height
+		for _, verifier := range s.managedVerifiers {
+			if !s.ctxt.CycleAuthority.VerifierInCurrentCycle(verifier.Identity.PublicKey) {
+				logging.InfoLog.Printf("sending UDP block for %v at height %v", utilities.ByteArrayToString(verifier.Identity.PublicKey), height)
+				s.broadcastUdpBlockForNewVerifier(verifier)
+			}
+		}
+	}
+}
+
+func (s *state) broadcastUdpBlockForNewVerifier(verifier *networking.ManagedVerifier) {
+	block := s.createNextBlock(s.frozenEdgeBlock, verifier)
+	content := message_content.NewMinimalBlock(block.VerificationTimestamp, block.VerifierSignature)
+	message := messages.NewLocal(messages.TypeMinimalBlock, content, verifier.Identity)
+	router.Router.RouteInternal(messages.NewInternalMessage(messages.TypeInternalSendToCycleUdp, message))
 }
