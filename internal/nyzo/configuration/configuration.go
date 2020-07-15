@@ -70,7 +70,7 @@ const (
 	GenesisBlockFileName     = "i_000000000.nyzoblock"
 	LockedAccountsFileName   = "locked_accounts"
 	SeedTransactionDirectory = "seed_transactions"
-	SeedTransactionSource    = "https://nyzo-transactions.nyc3.digitaloceanspaces.com"
+	SeedTransactionSource    = "https://seed.nyzo.co/seedTransactions"
 
 	// The public id of the genesis block verifier
 	GenesisVerifierNyzoHex = "64afc20a4a4097e8-494239f2e7d1b1db-de59a9b157453138-f4716b72a0424fef"
