@@ -35,32 +35,43 @@ type sentinelData struct {
 	lastNewVerifierBlockTransmissionHeight int64                    // last height at which we broadcast a new verifier block
 }
 
+// Create blocks for managed verifiers if necessary, old blocks will be cleared in freezeBlock.
+func (s *state) createBlocksForVerifiers() {
+	if s.sentinel.blocksForVerifiers == nil {
+		s.sentinel.blocksForVerifiers = make([]*blockchain_data.Block, len(s.managedVerifiers))
+		for i, managedVerifier := range s.managedVerifiers {
+			s.sentinel.blocksForVerifiers[i] = s.createNextBlock(s.frozenEdgeBlock, managedVerifier)
+		}
+	}
+}
+
+// Find lowest scored block among blocks produced for managed verifiers.
+func (s *state) findLowestScoredBlockForVerifiers() (lowestScoredBlock *blockchain_data.Block, lowestScore int64) {
+	if s.sentinel.blocksForVerifiers == nil {
+		return nil, MaxChainScore
+	}
+	lowestScore = MaxChainScore
+	for _, block := range s.sentinel.blocksForVerifiers {
+		score := s.chainScore(block, s.frozenEdgeHeight)
+		if block != nil && score < lowestScore && s.ctxt.CycleAuthority.VerifierInCurrentCycle(block.VerifierIdentifier) {
+			lowestScore = score
+			lowestScoredBlock = block
+		}
+	}
+	return lowestScoredBlock, lowestScore
+}
+
 // Transmit a block if one of the managed verifiers doesn't do its job.
 func (s *state) transmitBlockIfNecessary() {
 	// The block creation delay prevents unnecessary work and unnecessary transmissions to the mesh when the
 	// sentinel is initializing. We also allow the condition to be entered at least once to confirm that the
 	// sentinel is able to calculate valid chain scores.
 	if !s.sentinel.calculatingValidChainScores || s.sentinel.lastBlockReceivedTime < utilities.Now()-blockCreationDelay {
-		// create blocks if necessary, old blocks will be cleared in freezeBlock
-		if s.sentinel.blocksForVerifiers == nil {
-			s.sentinel.blocksForVerifiers = make([]*blockchain_data.Block, len(s.managedVerifiers))
-			for i, managedVerifier := range s.managedVerifiers {
-				s.sentinel.blocksForVerifiers[i] = s.createNextBlock(s.frozenEdgeBlock, managedVerifier)
-			}
-		}
+		s.createBlocksForVerifiers()
 		// for each new height, verify if we should transmit a block
 		if s.sentinel.lastBlockTransmissionHeight < s.frozenEdgeHeight+1 {
-			// find lowest scored block
-			var lowestScoredBlock *blockchain_data.Block
-			var lowestScore int64 = MaxChainScore
-			for _, block := range s.sentinel.blocksForVerifiers {
-				score := s.chainScore(block, s.frozenEdgeHeight)
-				if block != nil && score < lowestScore && s.ctxt.CycleAuthority.VerifierInCurrentCycle(block.VerifierIdentifier) {
-					lowestScore = score
-					lowestScoredBlock = block
-				}
-			}
-			if lowestScore < MaxChainScore-1 && lowestScoredBlock != nil {
+			lowestScoredBlock, lowestScore := s.findLowestScoredBlockForVerifiers()
+			if lowestScore < MaxChainScore-1 {
 				s.sentinel.calculatingValidChainScores = true
 				// If the block's minimum vote timestamp is in the past, transmit the block now. This is stricter
 				// than the verifier, which will transmit a block whose minimum vote timestamp is up to 10 seconds
