@@ -87,7 +87,7 @@ func (s *state) GetGenesisBlockHash() []byte {
 // Get the genesis block timestamp. Nyzo's block times are deterministic, any block's start time will always be
 // genesis timestamp + (height * block time)
 func (s *state) GetGenesisBlockTimestamp() int64 {
-	return s.genesisBlock.VerificationTimestamp
+	return s.genesisBlock.StartTimestamp
 }
 
 // Get current open edge height.

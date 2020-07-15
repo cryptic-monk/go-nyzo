@@ -60,7 +60,7 @@ func (ctxt *Context) SetRunMode(runMode int32) {
 }
 
 // Nyzo style ID (aka "override suffix") for run modes.
-func GetRunModeId(runMode int) string {
+func GetRunModeId(runMode int32) string {
 	switch runMode {
 	case RunModeVerifier:
 		return "verifier"

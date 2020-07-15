@@ -55,6 +55,8 @@ type BlockAuthorityInterface interface {
 	GetGenesisBlockHash() []byte
 	// Get genesis block timestamp.
 	GetGenesisBlockTimestamp() int64
+	// Get a status report for this component.
+	GetStatusReport() interface{}
 }
 
 type TransactionManagerInterface interface {

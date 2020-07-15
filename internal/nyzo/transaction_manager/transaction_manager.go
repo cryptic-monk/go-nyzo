@@ -93,7 +93,8 @@ func (s *state) ApprovedTransactionsForBlock(transactions []*blockchain_data.Tra
 	transactions = newTransactions
 	transactions = protectSeedFundingAccount(s.ctxt, transactions, blockHeight)
 	transactions = enforceCycleTransactionRules(s.ctxt, transactions, previousBlock.BlockchainVersion)
-	balanceList := s.ctxt.BlockHandler.GetBalanceListForBlock(previousBlock)
+	// Get the balance list and copy it so that the below operations don't impact other parts of the system.
+	balanceList := s.ctxt.BlockHandler.GetBalanceListForBlock(previousBlock).Copy()
 	transactions = enforceLockingRules(transactions, balanceList.BlockchainVersion, balanceList.UnlockThreshold, balanceList.UnlockTransferSum)
 	// Don't allow sending more than the account owns.
 	newTransactions = transactions[:0]

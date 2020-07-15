@@ -27,24 +27,24 @@ const (
 
 type Transaction struct {
 	// in all transactions
-	Type        byte   // 1 byte, see above
-	Timestamp   int64  // 8 bytes; 64-bit Unix timestamp of the transaction initiation, in milliseconds
-	Amount      int64  // 8 bytes; 64-bit amount in micronyzos
-	RecipientId []byte // 32 bytes (256-bit public key of the recipient)
+	Type        byte   `json:"type"`         // 1 byte, see above
+	Timestamp   int64  `json:"timestamp"`    // 8 bytes; 64-bit Unix timestamp of the transaction initiation, in milliseconds
+	Amount      int64  `json:"amount"`       // 8 bytes; 64-bit amount in micronyzos
+	RecipientId []byte `json:"recipient_id"` // 32 bytes (256-bit public key of the recipient)
 	// type 1, 2 and 3
-	PreviousHashHeight int64  // 8 bytes; 64-bit index of the block height of the previous-block hash
-	PreviousBlockHash  []byte // 32 bytes (SHA-256 of a recent block in the chain), not serialized
-	SenderId           []byte // 32 bytes (256-bit public key of the sender)
-	SenderData         []byte // up to 32 bytes, length when serialized: 1 byte + actual length
+	PreviousHashHeight int64  `json:"previous_hash_height"` // 8 bytes; 64-bit index of the block height of the previous-block hash
+	PreviousBlockHash  []byte `json:"previous_block_hash"`  // 32 bytes (SHA-256 of a recent block in the chain), not serialized
+	SenderId           []byte `json:"sender_id"`            // 32 bytes (256-bit public key of the sender)
+	SenderData         []byte `json:"sender_data"`          // up to 32 bytes, length when serialized: 1 byte + actual length
 	// type 1 and 2
-	Signature []byte // 64 bytes (512-bit signature)
+	Signature []byte `json:"signature"` // 64 bytes (512-bit signature)
 	// type 3
-	CycleSignatures []*CycleSignature
-	SignatureState  int
+	CycleSignatures []*CycleSignature `json:"cycle_signatures"`
+	SignatureState  int               `json:"signature_state"`
 	// type 4
-	CycleSignatureTransactions []*Transaction
-	CycleTransactionVote       bool
-	CycleTransactionSignature  []byte
+	CycleSignatureTransactions []*Transaction `json:"cycle_signature_transactions"`
+	CycleTransactionVote       bool           `json:"cycle_transaction_vote"`
+	CycleTransactionSignature  []byte         `json:"cycle_transaction_signature"`
 }
 
 func ReadNewTransaction(r io.Reader) (*Transaction, error) {

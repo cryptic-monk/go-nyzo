@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/cryptic-monk/go-nyzo/internal/logging"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/interfaces"
@@ -17,8 +18,19 @@ type state struct {
 	server                 *http.Server
 }
 
+type Status struct {
+	BlockAuthority interface{} `json:"block_authority"`
+}
+
 func (s *state) status(w http.ResponseWriter, r *http.Request) {
-	_, _ = fmt.Fprintf(w, "Ok")
+	status := Status{}
+	status.BlockAuthority = s.ctxt.BlockAuthority.GetStatusReport()
+	output, err := json.MarshalIndent(status, "", "    ")
+	if err != nil {
+		_, _ = fmt.Fprintf(w, "{\"error\": \"unable to generate report\"}")
+	} else {
+		_, _ = fmt.Fprintf(w, string(output))
+	}
 }
 
 func startServer(wg *sync.WaitGroup) *http.Server {

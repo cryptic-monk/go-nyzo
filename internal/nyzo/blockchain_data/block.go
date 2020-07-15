@@ -14,20 +14,20 @@ import (
 )
 
 type Block struct {
-	BlockchainVersion     int16          // 2 bytes; 16-bit integer of the blockchain version
-	Height                int64          // 6 bytes; 48-bit integer block height from the Genesis block, which has a height of 0
-	PreviousBlockHash     []byte         // 32 bytes (this is the double-SHA-256 of the previous block signature)
-	StartTimestamp        int64          // 8 bytes; 64-bit Unix timestamp of the start of the block, in milliseconds
-	VerificationTimestamp int64          // 8 bytes; 64-bit Unix timestamp of when the verifier creates the block, in milliseconds
-	Transactions          []*Transaction // 4 bytes for number + variable
-	BalanceListHash       []byte         // 32 bytes (this is the double-SHA-256 of the account balance list)
-	VerifierIdentifier    []byte         // 32 bytes
-	VerifierSignature     []byte         // 64 bytes
-	ContinuityState       int
-	SignatureState        int
-	CycleInformation      *CycleInformation
-	Hash                  []byte
-	CycleInfoCache        *BlockCycleInfoCache
+	BlockchainVersion     int16                `json:"blockchain_version"`     // 2 bytes; 16-bit integer of the blockchain version
+	Height                int64                `json:"height"`                 // 6 bytes; 48-bit integer block height from the Genesis block, which has a height of 0
+	PreviousBlockHash     []byte               `json:"previous_block_hash"`    // 32 bytes (this is the double-SHA-256 of the previous block signature)
+	StartTimestamp        int64                `json:"start_timestamp"`        // 8 bytes; 64-bit Unix timestamp of the start of the block, in milliseconds
+	VerificationTimestamp int64                `json:"verification_timestamp"` // 8 bytes; 64-bit Unix timestamp of when the verifier creates the block, in milliseconds
+	Transactions          []*Transaction       `json:"transactions"`           // 4 bytes for number + variable
+	BalanceListHash       []byte               `json:"balance_list_hash"`      // 32 bytes (this is the double-SHA-256 of the account balance list)
+	VerifierIdentifier    []byte               `json:"verifier_identifier"`    // 32 bytes
+	VerifierSignature     []byte               `json:"verifier_signature"`     // 64 bytes
+	ContinuityState       int                  `json:"continuity_state"`
+	SignatureState        int                  `json:"signature_state"`
+	CycleInformation      *CycleInformation    `json:"cycle_information"`
+	Hash                  []byte               `json:"hash"`
+	CycleInfoCache        *BlockCycleInfoCache `json:"cycle_info_cache"`
 }
 
 // Read a new block from the given reader.

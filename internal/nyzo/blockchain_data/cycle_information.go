@@ -4,10 +4,10 @@ Gets attached to a block, represents info about the current and past cycles.
 package blockchain_data
 
 type CycleInformation struct {
-	MaximumCycleLength int
-	CycleLengths       []int
-	NewVerifier        bool
-	InGenesisCycle     bool
+	MaximumCycleLength int   `json:"maximum_cycle_length"`
+	CycleLengths       []int `json:"cycle_lengths"`
+	NewVerifier        bool  `json:"new_verifier"`
+	InGenesisCycle     bool  `json:"in_genesis_cycle"`
 }
 
 // The trailing edge is 4 cycles back from the current height (or 0)

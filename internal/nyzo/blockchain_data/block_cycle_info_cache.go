@@ -5,7 +5,9 @@ cycle-related calculations and is only of local relevance.
 package blockchain_data
 
 type BlockCycleInfoCache struct {
-	Found, IsGenesis, NewVerifier bool
-	CycleTailHeight               int64
-	CycleHeadHeight               int64
+	Found           bool  `json:"found"`
+	IsGenesis       bool  `json:"is_genesis"`
+	NewVerifier     bool  `json:"new_verifier"`
+	CycleTailHeight int64 `json:"cycle_tail_height"`
+	CycleHeadHeight int64 `json:"cycle_head_height"`
 }

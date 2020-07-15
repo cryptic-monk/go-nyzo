@@ -262,3 +262,20 @@ func (bl *BalanceList) AdjustBalance(id []byte, amount int64) int64 {
 	bl.Items = append(bl.Items, item)
 	return amount
 }
+
+func (bl *BalanceList) MicronyzosInSystem() int64 {
+	var micronyzos int64
+	for _, item := range bl.Items {
+		micronyzos += item.Balance
+	}
+	micronyzos += int64(bl.RolloverFees)
+	return micronyzos
+}
+
+// Make a copy of this balance list.
+func (bl *BalanceList) Copy() *BalanceList {
+	b := bl.ToBytes()
+	newBalanceList := &BalanceList{}
+	_ = newBalanceList.Read(bytes.NewReader(b))
+	return newBalanceList
+}

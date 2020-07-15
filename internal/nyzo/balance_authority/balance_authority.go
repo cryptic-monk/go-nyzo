@@ -32,11 +32,8 @@ func UpdateBalanceListForNextBlock(ctxt *interfaces.Context, previousVerifier []
 		balanceList.RecentlyApprovedCycleTransactions = make([]*blockchain_data.ApprovedCycleTransaction, 0, 0)
 	} else {
 		// all other blocks: copy the balance list before updating it
-		b := balanceList.ToBytes()
-		newBalanceList := &blockchain_data.BalanceList{}
-		_ = newBalanceList.Read(bytes.NewReader(b))
-		balanceList = newBalanceList
-		// make sure we have these ready in case the blockchain version goes above 1 below
+		balanceList = balanceList.Copy()
+		// make sure we have these ready in case the blockchain version goes above 1 later
 		if balanceList.PendingCycleTransactions == nil {
 			balanceList.PendingCycleTransactions = make([]*blockchain_data.Transaction, 0, 0)
 		}

@@ -276,12 +276,6 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 		s.bufferHeadHeight = -1
 	}
 
-	// return from cache if we can
-	if startBlock.CycleInfoCache != nil && startBlock.CycleInfoCache.CycleTailHeight >= s.bufferTailHeight && startBlock.CycleInfoCache.CycleHeadHeight <= s.bufferHeadHeight {
-		cycle = s.cycleBuffer[startBlock.CycleInfoCache.CycleTailHeight-s.bufferTailHeight : int64(len(s.cycleBuffer))-(s.bufferHeadHeight-startBlock.CycleInfoCache.CycleHeadHeight)]
-		return startBlock.CycleInfoCache.Found, startBlock.CycleInfoCache.IsGenesis, startBlock.CycleInfoCache.NewVerifier, cycle, len(cycle)
-	}
-
 	// Fill an existing buffer backwards, starting from the given block, accounts for a possibly unfrozen part.
 	if s.bufferHeadHeight >= 0 && startBlock.Height > s.bufferHeadHeight {
 		tempBuffer := make([][]byte, 0, 0)
@@ -295,7 +289,20 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 			s.bufferHeadHeight = startBlock.Height
 		} else {
 			// gap in the chain, can't possible find a cycle
+			startBlock.CycleInfoCache = &blockchain_data.BlockCycleInfoCache{
+				Found: false,
+			}
 			return false, false, false, nil, 0
+		}
+	}
+
+	// return from cache if we can
+	if startBlock.CycleInfoCache != nil {
+		if !startBlock.CycleInfoCache.Found {
+			return false, false, false, nil, 0
+		} else if startBlock.CycleInfoCache.CycleTailHeight >= s.bufferTailHeight && startBlock.CycleInfoCache.CycleHeadHeight <= s.bufferHeadHeight {
+			cycle = s.cycleBuffer[startBlock.CycleInfoCache.CycleTailHeight-s.bufferTailHeight : int64(len(s.cycleBuffer))-(s.bufferHeadHeight-startBlock.CycleInfoCache.CycleHeadHeight)]
+			return startBlock.CycleInfoCache.Found, startBlock.CycleInfoCache.IsGenesis, startBlock.CycleInfoCache.NewVerifier, cycle, len(cycle)
 		}
 	}
 
@@ -315,6 +322,9 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 			tailBlock := s.ctxt.BlockHandler.GetBlock(tailHeight, nil)
 			if tailBlock == nil {
 				// gap in the chain, can't possible find a cycle
+				startBlock.CycleInfoCache = &blockchain_data.BlockCycleInfoCache{
+					Found: false,
+				}
 				return false, false, false, nil, 0
 			}
 			s.cycleBuffer = prependBytes(s.cycleBuffer, tailBlock.VerifierIdentifier)
@@ -337,14 +347,12 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 			tailHeight--
 		}
 	}
-	if found {
-		startBlock.CycleInfoCache = &blockchain_data.BlockCycleInfoCache{
-			Found:           found,
-			IsGenesis:       isGenesis,
-			NewVerifier:     newVerifier,
-			CycleHeadHeight: headHeight,
-			CycleTailHeight: headHeight - int64(len(cycle)) + 1,
-		}
+	startBlock.CycleInfoCache = &blockchain_data.BlockCycleInfoCache{
+		Found:           found,
+		IsGenesis:       isGenesis,
+		NewVerifier:     newVerifier,
+		CycleHeadHeight: headHeight,
+		CycleTailHeight: headHeight - int64(len(cycle)) + 1,
 	}
 	return found, isGenesis, newVerifier, cycle, len(cycle)
 }
@@ -480,8 +488,12 @@ func (s *state) Start() {
 				// Above baseline, one transaction is allowed per block for each Nyzo in organic transactions, on average, in the
 				// previous cycle. This ensures that transaction capacity automatically increases to support additional demand on
 				// the system while eliminating the possibility of cheap attacks with many small transactions.
-				additionalTransactions := s.cycleTransactionSum / configuration.MicronyzoMultiplierRatio / int64(len(s.currentCycle))
-				m.ReplyChannel <- messages.NewInternalMessage(localMessageMaximumTransactionsForBlockAssembly, int(configuration.BaselineTransactionsPerBlock+additionalTransactions))
+				if len(s.currentCycle) > 0 {
+					additionalTransactions := s.cycleTransactionSum / configuration.MicronyzoMultiplierRatio / int64(len(s.currentCycle))
+					m.ReplyChannel <- messages.NewInternalMessage(localMessageMaximumTransactionsForBlockAssembly, int(configuration.BaselineTransactionsPerBlock+additionalTransactions))
+				} else {
+					m.ReplyChannel <- messages.NewInternalMessage(localMessageMaximumTransactionsForBlockAssembly, configuration.BaselineTransactionsPerBlock)
+				}
 			case messages.TypeInternalNewFrozenEdgeBlock:
 				block := m.Payload[0].(*blockchain_data.Block)
 				// for s.winningBootstrapHeight, we already know the cycle, for all others...
