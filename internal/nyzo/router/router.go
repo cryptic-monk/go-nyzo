@@ -99,14 +99,6 @@ func (r *routerData) RouteInternal(message *messages.InternalMessage) {
 	}
 }
 
-// Convenience to create and route a local message and wait for a reply.
-func GetInternalReply(messageType int16, a ...interface{}) *messages.InternalMessage {
-	message := messages.NewInternalMessage(messageType, a...)
-	message.ReplyChannel = make(chan *messages.InternalMessage, 1)
-	Router.RouteInternal(message)
-	return <-message.ReplyChannel
-}
-
 func init() {
 	Router = &routerData{}
 	Router.routes = make(map[int16][]chan *messages.Message)

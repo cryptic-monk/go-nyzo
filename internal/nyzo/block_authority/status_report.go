@@ -15,7 +15,11 @@ type Report struct {
 	LowestScore         int64                  `json:"lowest_score"`
 }
 
+// Get a status report for this component.
+// Concurrency: handled via state access lock.
 func (s *state) GetStatusReport() interface{} {
+	s.m.Lock()
+	defer s.m.Unlock()
 	r := Report{}
 	r.RunMode = interfaces.GetRunModeId(s.ctxt.RunMode())
 	r.FrozenEdge = s.frozenEdgeHeight

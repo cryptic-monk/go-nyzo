@@ -22,6 +22,7 @@ import (
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/networking"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/router"
 	"github.com/cryptic-monk/go-nyzo/internal/nyzo/utilities"
+	"sync"
 	"time"
 )
 
@@ -32,6 +33,7 @@ const (
 )
 
 type state struct {
+	m                         sync.Mutex // state access lock, locked when main loop is active
 	ctxt                      *interfaces.Context
 	genesisBlock              *blockchain_data.Block
 	frozenEdgeHeight          int64
@@ -52,6 +54,7 @@ type state struct {
 }
 
 // Do a full verification of this block: signature (including transactions) and continuity.
+// Concurrency: regular use is local to the Block Authority, function is exposed publicly for blockchain level tests.
 func (s *state) BlockIsValid(block *blockchain_data.Block) bool {
 	// Note: balance list calculation is checked in StoreBlock only, as the balance list is not technically part of the Block itself
 	if s.chainInitialized || !s.fastChainInitialization {
@@ -80,17 +83,20 @@ func (s *state) BlockIsValid(block *blockchain_data.Block) bool {
 }
 
 // Get the genesis block hash, used for seed transactions.
+// Concurrency: written once during startup, so no concurrency handling needed.
 func (s *state) GetGenesisBlockHash() []byte {
 	return s.genesisBlock.Hash
 }
 
-// Get the genesis block timestamp. Nyzo's block times are deterministic, any block's start time will always be
-// genesis timestamp + (height * block time)
+// Get the genesis block start timestamp. Nyzo's block times are deterministic, any block's start time will always be
+// genesis start timestamp + (height * block time).
+// Concurrency: written once during startup, so no concurrency handling needed.
 func (s *state) GetGenesisBlockTimestamp() int64 {
 	return s.genesisBlock.StartTimestamp
 }
 
 // Get current open edge height.
+// Concurrency: genesis block data written once during startup, so no concurrency handling needed.
 func (s *state) GetOpenEdgeHeight(forRegistration bool) int64 {
 	if s.genesisBlock == nil {
 		return -1
@@ -484,6 +490,7 @@ func (s *state) Start() {
 	for !done {
 		select {
 		case m := <-s.internalMessageChannel:
+			s.m.Lock()
 			switch m.Type {
 			case messages.TypeInternalDataStoreHeight:
 				if s.ctxt.RunMode() == interfaces.RunModeArchive {
@@ -506,7 +513,9 @@ func (s *state) Start() {
 			case messages.TypeInternalExiting:
 				done = true
 			}
+			s.m.Unlock()
 		case m := <-s.messageChannel:
+			s.m.Lock()
 			switch m.Type {
 			case messages.TypeNewBlockResponse:
 				s.sentinel.blockTransmissionSuccessCount++
@@ -515,8 +524,11 @@ func (s *state) Start() {
 			case messages.TypeBlockWithVotesResponse:
 				s.processBlockWithVotesResponse(m)
 			}
+			s.m.Unlock()
 		case <-chainWatcherTicker.C:
+			s.m.Lock()
 			if !s.chainLoaded {
+				s.m.Unlock()
 				continue
 			}
 			if !s.chainInitialized {
@@ -535,6 +547,7 @@ func (s *state) Start() {
 				// initialization done
 				chainWatcherTicker.Stop()
 			}
+			s.m.Unlock()
 		}
 	}
 }

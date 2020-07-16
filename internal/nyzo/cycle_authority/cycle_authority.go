@@ -23,15 +23,8 @@ import (
 	"time"
 )
 
-const (
-	localMessageGetCurrentCycleLength               = -1
-	localMessageVerifierInCurrentCycle              = -2
-	localMessageHasCycleAt                          = -3
-	localMessageMaximumTransactionsForBlockAssembly = -4
-	localMessageGetLastVerifierJoinHeight           = -5
-)
-
 type state struct {
+	m                         sync.Mutex // state access lock, locked when main loop is active
 	ctxt                      *interfaces.Context
 	cycleComplete             bool                           // do we know about a complete cycle?
 	currentCycleEndHeight     int64                          // the end height of the current cycle
@@ -53,55 +46,71 @@ type state struct {
 	cycleTransactionSum       int64 // sum of organic transactions in current cycle
 }
 
-// Length of the current cycle. This goes through the loop to make sure we can handle concurrency.
+// Length of the current cycle.
+// Concurrency: handled via state access lock.
 func (s *state) GetCurrentCycleLength() int {
-	reply := router.GetInternalReply(localMessageGetCurrentCycleLength)
-	return reply.Payload[0].(int)
+	s.m.Lock()
+	defer s.m.Unlock()
+	return len(s.currentCycle)
 }
 
-// Last height at which a verifier joined. This goes through the loop to make sure we can handle concurrency.
+// Last height at which a verifier joined.
+// Concurrency: reading only is safu here.
 func (s *state) GetLastVerifierJoinHeight() int64 {
-	reply := router.GetInternalReply(localMessageGetLastVerifierJoinHeight)
-	return reply.Payload[0].(int64)
+	return s.lastVerifierJoinHeight
 }
 
-// Is the given verifier currently in cycle? This goes through the loop to make sure we can handle concurrency.
+// Is the given verifier currently in cycle?
+// Concurrency: handled via state access lock.
 func (s *state) VerifierInCurrentCycle(id []byte) bool {
-	reply := router.GetInternalReply(localMessageVerifierInCurrentCycle, id)
-	return reply.Payload[0].(bool)
+	s.m.Lock()
+	defer s.m.Unlock()
+	return s.verifierInCurrentCycle(id)
 }
 
-// Transaction rate limiting. This goes through the loop to make sure we can handle concurrency.
+// Transaction rate limiting.
+// Concurrency: handled via state access lock.
 func (s *state) GetMaximumTransactionsForBlockAssembly() int {
-	reply := router.GetInternalReply(localMessageMaximumTransactionsForBlockAssembly)
-	return reply.Payload[0].(int)
+	s.m.Lock()
+	defer s.m.Unlock()
+	// Above baseline, one transaction is allowed per block for each Nyzo in organic transactions, on average, in the
+	// previous cycle. This ensures that transaction capacity automatically increases to support additional demand on
+	// the system while eliminating the possibility of cheap attacks with many small transactions.
+	if len(s.currentCycle) > 0 {
+		additionalTransactions := s.cycleTransactionSum / configuration.MicronyzoMultiplierRatio / int64(len(s.currentCycle))
+		return int(configuration.BaselineTransactionsPerBlock + additionalTransactions)
+	} else {
+		return configuration.BaselineTransactionsPerBlock
+	}
 }
 
 // TODO: Implement this.
+// Concurrency: handled via state access lock.
 func (s *state) GetTopNewVerifier() []byte {
+	s.m.Lock()
+	defer s.m.Unlock()
 	return make([]byte, 32, 32)
 }
 
 // TODO: Implement this.
+// Concurrency: handled via state access lock.
 func (s *state) ShouldPenalizeVerifier(verifier []byte) bool {
+	s.m.Lock()
+	defer s.m.Unlock()
 	return false
 }
 
-// Is the given verifier currently in cycle? Can yield false positives during startup.
-func (s *state) verifierInCurrentCycle(id []byte) bool {
-	// startup phase, we assume that all verifiers are in cycle
-	if len(s.currentCycle) == 0 {
-		return true
-	}
-	for _, v := range s.currentCycle {
-		if bytes.Equal(id, v) {
-			return true
-		}
-	}
-	return false
+// Returns true if we know a cycle at the given block.
+// Concurrency: handled via state access lock.
+func (s *state) HasCycleAt(block *blockchain_data.Block) bool {
+	s.m.Lock()
+	defer s.m.Unlock()
+	foundCycle, _, _, _, _ := s.findCycleAt(block)
+	return foundCycle
 }
 
 // Returns cycle information for the given block, calculating it first if necessary.
+// Concurrency: handled internally (cycle buffer lock), rest is not read/written concurrently at the moment.
 func (s *state) GetCycleInformationForBlock(block *blockchain_data.Block) *blockchain_data.CycleInformation {
 	if block.CycleInformation != nil {
 		return block.CycleInformation
@@ -170,6 +179,7 @@ func (s *state) GetCycleInformationForBlock(block *blockchain_data.Block) *block
 }
 
 // Verify continuity (diversity) rules for this block.
+// Concurrency: handled internally (cycle buffer lock), rest is not read/written concurrently at the moment.
 func (s *state) DetermineContinuityForBlock(block *blockchain_data.Block) int {
 	//TODO: needs to be secured for concurrency
 	if block.ContinuityState != blockchain_data.Undetermined {
@@ -228,10 +238,18 @@ func (s *state) DetermineContinuityForBlock(block *blockchain_data.Block) int {
 	return block.ContinuityState
 }
 
-// Returns true if we know a cycle at the given block.
-func (s *state) HasCycleAt(block *blockchain_data.Block) bool {
-	reply := router.GetInternalReply(localMessageHasCycleAt, block)
-	return reply.Payload[0].(bool)
+// Is the given verifier currently in cycle? Can yield false positives during startup.
+func (s *state) verifierInCurrentCycle(id []byte) bool {
+	// startup phase, we assume that all verifiers are in cycle
+	if len(s.currentCycle) == 0 {
+		return true
+	}
+	for _, v := range s.currentCycle {
+		if bytes.Equal(id, v) {
+			return true
+		}
+	}
+	return false
 }
 
 // Utility to prepend y to x in the most memory efficient way possible.
@@ -474,26 +492,8 @@ func (s *state) Start() {
 	for !done {
 		select {
 		case m := <-s.internalMessageChannel:
+			s.m.Lock()
 			switch m.Type {
-			case localMessageGetCurrentCycleLength:
-				m.ReplyChannel <- messages.NewInternalMessage(localMessageGetCurrentCycleLength, len(s.currentCycle))
-			case localMessageGetLastVerifierJoinHeight:
-				m.ReplyChannel <- messages.NewInternalMessage(localMessageGetLastVerifierJoinHeight, s.lastVerifierJoinHeight)
-			case localMessageVerifierInCurrentCycle:
-				m.ReplyChannel <- messages.NewInternalMessage(localMessageVerifierInCurrentCycle, s.verifierInCurrentCycle(m.Payload[0].([]byte)))
-			case localMessageHasCycleAt:
-				foundCycle, _, _, _, _ := s.findCycleAt(m.Payload[0].(*blockchain_data.Block))
-				m.ReplyChannel <- messages.NewInternalMessage(localMessageHasCycleAt, foundCycle)
-			case localMessageMaximumTransactionsForBlockAssembly:
-				// Above baseline, one transaction is allowed per block for each Nyzo in organic transactions, on average, in the
-				// previous cycle. This ensures that transaction capacity automatically increases to support additional demand on
-				// the system while eliminating the possibility of cheap attacks with many small transactions.
-				if len(s.currentCycle) > 0 {
-					additionalTransactions := s.cycleTransactionSum / configuration.MicronyzoMultiplierRatio / int64(len(s.currentCycle))
-					m.ReplyChannel <- messages.NewInternalMessage(localMessageMaximumTransactionsForBlockAssembly, int(configuration.BaselineTransactionsPerBlock+additionalTransactions))
-				} else {
-					m.ReplyChannel <- messages.NewInternalMessage(localMessageMaximumTransactionsForBlockAssembly, configuration.BaselineTransactionsPerBlock)
-				}
 			case messages.TypeInternalNewFrozenEdgeBlock:
 				block := m.Payload[0].(*blockchain_data.Block)
 				// for s.winningBootstrapHeight, we already know the cycle, for all others...
@@ -515,12 +515,16 @@ func (s *state) Start() {
 			case messages.TypeInternalExiting:
 				done = true
 			}
+			s.m.Unlock()
 		case m := <-s.messageChannel:
+			s.m.Lock()
 			switch m.Type {
 			case messages.TypeBootstrapResponse:
 				s.processBootstrapResponse(m)
 			}
+			s.m.Unlock()
 		case <-bootstrapTicker.C:
+			s.m.Lock()
 			if s.winningBootstrapHeight > 0 {
 				s.setBootstrapCycle(s.winningBootstrapCycle, s.winningBootstrapHeight)
 				router.Router.RouteInternal(messages.NewInternalMessage(messages.TypeInternalBootstrapBlock, s.winningBootstrapHeight, s.winningBootstrapHash))
@@ -531,6 +535,7 @@ func (s *state) Start() {
 			} else {
 				bootstrapTicker.Stop()
 			}
+			s.m.Unlock()
 		}
 	}
 }
@@ -544,11 +549,6 @@ func (s *state) Initialize() error {
 	router.Router.AddInternalRoute(messages.TypeInternalNewFrozenEdgeBlock, s.internalMessageChannel)
 	router.Router.AddInternalRoute(messages.TypeInternalExiting, s.internalMessageChannel)
 	router.Router.AddInternalRoute(messages.TypeInternalChainInitialized, s.internalMessageChannel)
-	router.Router.AddInternalRoute(localMessageGetCurrentCycleLength, s.internalMessageChannel)
-	router.Router.AddInternalRoute(localMessageVerifierInCurrentCycle, s.internalMessageChannel)
-	router.Router.AddInternalRoute(localMessageHasCycleAt, s.internalMessageChannel)
-	router.Router.AddInternalRoute(localMessageMaximumTransactionsForBlockAssembly, s.internalMessageChannel)
-	router.Router.AddInternalRoute(localMessageGetLastVerifierJoinHeight, s.internalMessageChannel)
 	s.currentCycle = make([][]byte, 0, 0)
 	s.cycleBuffer = make([][]byte, 0, 0)
 	s.bufferHeadHeight = -1

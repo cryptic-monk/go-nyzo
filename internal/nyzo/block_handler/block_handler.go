@@ -47,7 +47,6 @@ type state struct {
 	balanceListCache         map[int64]*blockchain_data.BalanceList // cache for balance lists
 	balanceListCacheLock     sync.Mutex                             // mutex for balance list cache
 	frozenEdgeHeight         int64
-	frozenEdgeTime           int64
 	trailingEdgeHeight       int64
 	retentionEdgeHeight      int64
 	lastCycleLength          int
@@ -153,7 +152,6 @@ func prependBlock(x []*blockchain_data.Block, y *blockchain_data.Block) []*block
 // This is exclusively called by freezeBlock in the block authority.
 func (s *state) CommitFrozenEdgeBlock(block *blockchain_data.Block, balanceList *blockchain_data.BalanceList) {
 	s.frozenEdgeHeight = block.Height
-	s.frozenEdgeTime = block.VerificationTimestamp
 	// Store the block, via UpdateBalanceListForNextBlock, this will emit transaction and cycle signature events for archive mode.
 	s.storeBlock(block, balanceList)
 	// Cycle information.
