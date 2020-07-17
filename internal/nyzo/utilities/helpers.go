@@ -8,7 +8,7 @@ import (
 	"fmt"
 )
 
-// Returns true if the given array of byte arrays contains lookFor
+// Returns true if the given array of byte arrays contains lookFor.
 func ByteArrayContains(array [][]byte, lookFor []byte) bool {
 	for _, item := range array {
 		if bytes.Equal(item, lookFor) {
@@ -16,6 +16,11 @@ func ByteArrayContains(array [][]byte, lookFor []byte) bool {
 		}
 	}
 	return false
+}
+
+// Used to find a cycle, lookFor must be at len-1 or len-2 of the array.
+func CycleContains(array [][]byte, lookFor []byte) bool {
+	return (len(array) > 0 && bytes.Equal(array[len(array)-1], lookFor)) || (len(array) > 1 && bytes.Equal(array[len(array)-2], lookFor))
 }
 
 // Compares two byte arrays for sorting purposes.

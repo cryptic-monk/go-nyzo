@@ -350,7 +350,7 @@ func (s *state) findCycleAt(startBlock *blockchain_data.Block) (found, isGenesis
 		}
 		if headHeight != tailHeight {
 			cycle = s.cycleBuffer[tailHeight-s.bufferTailHeight+1 : int64(len(s.cycleBuffer))-(s.bufferHeadHeight-headHeight)]
-			if utilities.ByteArrayContains(cycle, s.cycleBuffer[tailHeight-s.bufferTailHeight]) {
+			if utilities.CycleContains(cycle, s.cycleBuffer[tailHeight-s.bufferTailHeight]) {
 				found = true
 				newVerifier = !bytes.Equal(startBlock.VerifierIdentifier, s.cycleBuffer[tailHeight-s.bufferTailHeight])
 			}
