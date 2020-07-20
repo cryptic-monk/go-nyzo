@@ -77,8 +77,6 @@ func ReadNew(r io.Reader, sourceAddress string) (*Message, error) {
 		switch message.Type {
 		case TypeNewBlock:
 			message.Content = &message_content.NewBlock{}
-		case TypeNewBlockResponse:
-			message.Content = &message_content.NoContent{}
 		case TypeBlockRequest:
 			message.Content = &message_content.BlockRequest{}
 		case TypeBlockResponse:

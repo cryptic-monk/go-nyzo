@@ -24,7 +24,7 @@ func (c *NewBlock) ToBytes() []byte {
 	var serialized []byte
 	serialized = append(serialized, c.Block.ToBytes()...)
 	// legacy: port number (no longer used)
-	serialized = append(serialized, message_fields.SerializeInt32(-1)...)
+	serialized = append(serialized, message_fields.SerializeInt32(0)...)
 	return serialized
 }
 

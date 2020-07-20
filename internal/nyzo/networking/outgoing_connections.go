@@ -13,9 +13,25 @@ import (
 	"time"
 )
 
+// Buffered channel used as counting semaphore to limit connections.
+// Idea: https://dev.to/dorin/go-counting-semaphores-j4a.
+//const connectionLimit = 2000
+
+//var connections = make(chan struct{}, connectionLimit)
+
+//func getConnectionSlot() {
+//	connections <- struct{}{}
+//}
+
+//func freeConnectionSlot() {
+//	<-connections
+//}
+
 // Fetch over TCP from string IP or with name resolution.
 // Used during startup only, so no success tracking.
 func FetchTcpNamed(m *messages.Message, host string, port int32) {
+	//getConnectionSlot()
+	//defer freeConnectionSlot()
 	portString := strconv.Itoa(int(port))
 	// establish connection
 	conn, err := net.DialTimeout("tcp", host+":"+portString, messages.ConnectionTimeout)
@@ -35,6 +51,8 @@ func FetchTcpNamed(m *messages.Message, host string, port int32) {
 
 // Fetch over TCP with known IP.
 func FetchTcp(m *messages.Message, host []byte, port int32) {
+	//getConnectionSlot()
+	//defer freeConnectionSlot()
 	// we normally use bytes + int, Go uses strings
 	hostString := message_fields.IP4BytesToString(host)
 	portString := strconv.Itoa(int(port))

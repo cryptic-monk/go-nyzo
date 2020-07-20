@@ -77,6 +77,7 @@ func (t *Transaction) GetSerializedLength() int {
 			length = 32
 		}
 		size += message_fields.SizeUnnamedByte + length
+		size += message_fields.SizeSignature
 
 		if t.Type == TransactionTypeCycle {
 			// These are stored differently in the v1 and v2 blockchains. The cycleSignatures field is used for

@@ -484,7 +484,7 @@ func (s *state) Start() {
 	now := utilities.Now()
 	s.blockSpeedTracker = now
 	// prevents that we immediately send a block
-	s.sentinel.lastBlockReceivedTime = now
+	s.sentinel.lastBlockTransmissionTime = now
 	chainWatcherTicker := time.NewTicker(1 * time.Second)
 	done := false
 	for !done {
